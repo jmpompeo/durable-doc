@@ -64,7 +64,7 @@ public static class MermaidRenderer
 
         private static string GetNodeShape(WorkflowNode node)
         {
-            var label = FormatNodeLabel(node.Name);
+            var label = FormatNodeLabel(string.IsNullOrWhiteSpace(node.DisplayLabel) ? node.Name : node.DisplayLabel);
 
             return node.NodeType switch
             {
@@ -72,6 +72,7 @@ public static class MermaidRenderer
                 WorkflowNodeType.RetryActivity => $"{{{{\"{label}\"}}}}",
                 WorkflowNodeType.ExternalEvent => $"[[\"{label}\"]]",
                 WorkflowNodeType.Timer => $"[/\"{label}\"/]",
+                WorkflowNodeType.ParallelGroup => $"((\"{label}\"))",
                 WorkflowNodeType.FanOut => $"((\"{label}\"))",
                 WorkflowNodeType.FanIn => $"((\"{label}\"))",
                 WorkflowNodeType.Decision => $"{{\"{label}\"}}",
@@ -126,6 +127,7 @@ public static class MermaidRenderer
                 var businessNode = new WorkflowNode
                 {
                     Id = businessNodeId,
+                    DisplayLabel = GetBusinessNodeName(node),
                     NodeType = GetBusinessNodeType(node),
                     Name = GetBusinessNodeName(node),
                     SourceFile = node.SourceFile,
@@ -206,8 +208,6 @@ public static class MermaidRenderer
                 Id = diagram.Id,
                 OrchestratorName = diagram.OrchestratorName,
                 SourceFile = diagram.SourceFile,
-                StartLine = diagram.StartLine,
-                EndLine = diagram.EndLine,
                 CreatedTimestamp = diagram.CreatedTimestamp,
                 Nodes = visibleNodes,
                 Edges = businessEdges,

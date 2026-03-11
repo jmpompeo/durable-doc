@@ -60,12 +60,12 @@ public enum WorkflowNodeType
     OrchestratorStart,
     Activity,
     SubOrchestrator,
+    RetryActivity,
     Decision,
     ParallelGroup,
     ExternalEvent,
     Timer,
     FanOut,
     FanIn,
-    Decision,
     Wrapper,
 }
