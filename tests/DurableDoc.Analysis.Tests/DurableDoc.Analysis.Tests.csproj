@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DurableDoc.Analysis\DurableDoc.Analysis.csproj" />
+  </ItemGroup>
+</Project>
