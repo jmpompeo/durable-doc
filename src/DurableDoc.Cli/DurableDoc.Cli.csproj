@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>DurableDoc.Cli</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DurableDoc.Analysis\DurableDoc.Analysis.csproj" />
+    <ProjectReference Include="..\DurableDoc.Configuration\DurableDoc.Configuration.csproj" />
+    <ProjectReference Include="..\DurableDoc.Dashboard\DurableDoc.Dashboard.csproj" />
+    <ProjectReference Include="..\DurableDoc.Rendering.Mermaid\DurableDoc.Rendering.Mermaid.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
+  </ItemGroup>
+</Project>

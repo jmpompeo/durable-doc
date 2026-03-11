@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DurableDoc.Configuration\DurableDoc.Configuration.csproj" />
+  </ItemGroup>
+</Project>
