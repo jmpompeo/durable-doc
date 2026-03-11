@@ -125,6 +125,113 @@ public class Demo
     }
 
     [Fact]
+    public async Task AnalyzeAsync_RecognizesBuiltInWrapperWithoutConfig()
+    {
+        using var fixture = new TempSourceFixture("""
+using System.Threading.Tasks;
+
+public class Demo
+{
+    [OrchestrationTrigger]
+    public async Task Run(TaskOrchestrationContext ctx)
+    {
+        await CallActivityWithVoidResult("ShipOrder");
+    }
+
+    private Task CallActivityWithVoidResult(string name) => Task.CompletedTask;
+}
+""");
+
+        var analyzer = new WorkflowAnalyzer();
+        var diagrams = await analyzer.AnalyzeAsync(fixture.DirectoryPath);
+
+        var diagram = Assert.Single(diagrams);
+        Assert.Contains(diagram.Nodes, n => n.NodeType == WorkflowNodeType.Activity && n.DisplayLabel == "ShipOrder");
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_InlinesHelpers_AndDetectsBranchesAndFanOut()
+    {
+        using var fixture = new TempSourceFixture("""
+using System.Threading.Tasks;
+
+public class Demo
+{
+    [OrchestrationTrigger]
+    public async Task Run(TaskOrchestrationContext ctx)
+    {
+        await RunValidation(ctx);
+
+        if (true)
+        {
+            await ctx.CallSubOrchestratorAsync("ApproveOrder");
+        }
+        else
+        {
+            await ctx.CallActivityAsync("RejectOrder");
+        }
+
+        await Task.WhenAll(
+            ctx.CallActivityAsync("NotifyWarehouse"),
+            ctx.CallActivityAsync("NotifyCustomer"));
+    }
+
+    private async Task RunValidation(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ValidateOrder");
+    }
+}
+""");
+
+        var analyzer = new WorkflowAnalyzer();
+        var diagrams = await analyzer.AnalyzeAsync(fixture.DirectoryPath);
+
+        var diagram = Assert.Single(diagrams);
+        Assert.Contains(diagram.Nodes, node => node.NodeType == WorkflowNodeType.Activity && node.DisplayLabel == "ValidateOrder");
+        Assert.Contains(diagram.Nodes, node => node.NodeType == WorkflowNodeType.Decision);
+        Assert.Contains(diagram.Nodes, node => node.NodeType == WorkflowNodeType.FanOut);
+        Assert.Contains(diagram.Nodes, node => node.NodeType == WorkflowNodeType.FanIn);
+        Assert.Contains(diagram.Edges, edge => edge.ConditionLabel == "true");
+        Assert.Contains(diagram.Edges, edge => edge.ConditionLabel == "false");
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_OnSingleFileInput_OnlyAnalyzesThatFile()
+    {
+        using var fixture = new TempSourceFixture(
+            """
+using System.Threading.Tasks;
+
+public class FirstDemo
+{
+    [OrchestrationTrigger]
+    public async Task First(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ValidateOrder");
+    }
+}
+""",
+            """
+using System.Threading.Tasks;
+
+public class SecondDemo
+{
+    [OrchestrationTrigger]
+    public async Task Second(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ChargePayment");
+    }
+}
+""");
+
+        var analyzer = new WorkflowAnalyzer();
+        var diagrams = await analyzer.AnalyzeAsync(fixture.PrimaryFilePath);
+
+        var diagram = Assert.Single(diagrams);
+        Assert.Equal("First", diagram.OrchestratorName);
+    }
+
+    [Fact]
     public async Task WorkflowDiagramJson_SerializesResult()
     {
         using var fixture = new TempSourceFixture("""
@@ -154,11 +261,18 @@ internal sealed class TempSourceFixture : IDisposable
 {
     public string DirectoryPath { get; }
 
-    public TempSourceFixture(string source)
+    public string PrimaryFilePath { get; }
+
+    public TempSourceFixture(params string[] sources)
     {
         DirectoryPath = Path.Combine(Path.GetTempPath(), "durable-doc-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(DirectoryPath);
-        File.WriteAllText(Path.Combine(DirectoryPath, "Sample.cs"), source);
+        PrimaryFilePath = Path.Combine(DirectoryPath, "Sample0.cs");
+
+        for (var index = 0; index < sources.Length; index++)
+        {
+            File.WriteAllText(Path.Combine(DirectoryPath, $"Sample{index}.cs"), sources[index]);
+        }
     }
 
     public void Dispose()

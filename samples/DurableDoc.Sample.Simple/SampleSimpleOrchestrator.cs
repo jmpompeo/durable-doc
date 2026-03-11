@@ -1,4 +1,14 @@
+using System.Threading.Tasks;
+
 namespace DurableDoc.Sample.Simple;
 
-// TODO (Phase 1+): Add a simple sequential orchestrator sample.
-public static class SampleSimpleOrchestrator;
+public static class SampleSimpleOrchestrator
+{
+    public static async Task RunBasicFulfillment(TaskOrchestrationContext context)
+    {
+        await context.CallActivityAsync("ValidateOrder");
+        await context.CallActivityAsync("ReserveInventory");
+        await context.CallActivityAsync("ChargePayment");
+        await context.CallActivityAsync("SendReceipt");
+    }
+}

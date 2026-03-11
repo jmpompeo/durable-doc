@@ -113,6 +113,29 @@ public class SmokeTests
         Assert.Contains("n1 --> n2", mermaid);
     }
 
+    [Fact]
+    public void Developer_mode_renders_retry_sub_orchestrators_as_retry_nodes()
+    {
+        var diagram = new WorkflowDiagram
+        {
+            Id = "retry-subflow",
+            OrchestratorName = "RetrySubflow",
+            Nodes =
+            [
+                new WorkflowNode { Id = "start", NodeType = WorkflowNodeType.OrchestratorStart, Name = "RetrySubflow" },
+                new WorkflowNode { Id = "sub", NodeType = WorkflowNodeType.RetrySubOrchestrator, Name = "ScheduleFollowUp" },
+            ],
+            Edges =
+            [
+                new WorkflowEdge { FromNodeId = "start", ToNodeId = "sub" },
+            ],
+        };
+
+        var mermaid = MermaidRenderer.Render(diagram);
+
+        Assert.Contains("{{\"ScheduleFollowUp\"}}", mermaid);
+    }
+
     private static int CountOccurrences(string value, string fragment)
     {
         var count = 0;

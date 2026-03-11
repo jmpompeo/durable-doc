@@ -1,5 +1,6 @@
 using DurableDoc.Configuration;
 using System.CommandLine;
+using System.CommandLine.Invocation;
 
 var configOption = new Option<FileInfo?>("--config", "Path to durable-doc.json");
 var verbosityOption = new Option<string>("--verbosity", () => "normal", "Log verbosity: quiet, normal, or detailed");
@@ -31,28 +32,39 @@ static Command CreateGenerateCommand(
     };
     var orchestratorOption = new Option<string?>("--orchestrator", "Optional orchestrator name filter");
     var modeOption = new Option<string>("--mode", () => "developer", "Diagram mode: developer or business");
-    var outputOption = new Option<DirectoryInfo>(
+    var formatOption = new Option<string?>("--format", "Output format. MVP supports 'mermaid'.");
+    var outputOption = new Option<DirectoryInfo?>(
         "--output",
-        () => new DirectoryInfo(Path.Combine(Directory.GetCurrentDirectory(), "docs", "diagrams")),
         "Directory for generated diagrams and dashboard");
 
     var command = new Command("generate", "Generate Mermaid diagrams and build the static dashboard");
     command.AddOption(inputOption);
     command.AddOption(orchestratorOption);
     command.AddOption(modeOption);
+    command.AddOption(formatOption);
     command.AddOption(outputOption);
-    command.SetHandler(async (string input, string? orchestrator, string mode, DirectoryInfo output, FileInfo? configFile, string verbosity, bool ci, bool strict) =>
+    command.SetHandler(async (InvocationContext invocationContext) =>
     {
+        var input = invocationContext.ParseResult.GetValueForOption(inputOption)!;
+        var orchestrator = invocationContext.ParseResult.GetValueForOption(orchestratorOption);
+        var mode = invocationContext.ParseResult.GetValueForOption(modeOption)!;
+        var format = invocationContext.ParseResult.GetValueForOption(formatOption);
+        var output = invocationContext.ParseResult.GetValueForOption(outputOption);
+        var configFile = invocationContext.ParseResult.GetValueForOption(configOption);
+        var verbosity = invocationContext.ParseResult.GetValueForOption(verbosityOption)!;
+        var ci = invocationContext.ParseResult.GetValueForOption(ciOption);
+        var strict = invocationContext.ParseResult.GetValueForOption(strictOption);
         var context = CreateContext(verbosity, ci);
         Environment.ExitCode = await DurableDoc.Cli.GenerateCommandHandler.ExecuteAsync(
             input,
-            output.FullName,
+            output?.FullName,
             orchestrator,
             mode,
+            format,
             configFile?.FullName,
             strict,
             context);
-    }, inputOption, orchestratorOption, modeOption, outputOption, configOption, verbosityOption, ciOption, strictOption);
+    });
 
     return command;
 }
@@ -94,18 +106,21 @@ static Command CreateValidateCommand(
     {
         IsRequired = true,
     };
+    var orchestratorOption = new Option<string?>("--orchestrator", "Optional orchestrator name filter");
 
     var command = new Command("validate", "Validate configuration and analyze the requested input for warnings");
     command.AddOption(inputOption);
-    command.SetHandler(async (string input, FileInfo? configFile, string verbosity, bool ci, bool strict) =>
+    command.AddOption(orchestratorOption);
+    command.SetHandler(async (string input, string? orchestrator, FileInfo? configFile, string verbosity, bool ci, bool strict) =>
     {
         var context = CreateContext(verbosity, ci);
         Environment.ExitCode = await DurableDoc.Cli.ValidateCommandHandler.ExecuteAsync(
             input,
+            orchestrator,
             configFile?.FullName,
             strict,
             context);
-    }, inputOption, configOption, verbosityOption, ciOption, strictOption);
+    }, inputOption, orchestratorOption, configOption, verbosityOption, ciOption, strictOption);
 
     return command;
 }

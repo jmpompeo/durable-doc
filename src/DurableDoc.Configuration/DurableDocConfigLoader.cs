@@ -27,7 +27,10 @@ public static class DurableDocConfigLoader
         config.Defaults ??= new DefaultsOptions();
         config.Analysis ??= new AnalysisOptions();
         config.Analysis.Wrappers ??= [];
+        config.Analysis.IncludePatterns ??= [];
+        config.Analysis.ExcludePatterns ??= [];
         config.BusinessView ??= new BusinessViewOptions();
+        config.BusinessView.Orchestrators ??= [];
         config.Rendering ??= new RenderingOptions();
         config.Dashboard ??= new DashboardOptions();
 

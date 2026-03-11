@@ -93,6 +93,33 @@ public class SmokeTests
         Assert.Equal(currentConfig, resolved);
     }
 
+    [Fact]
+    public void Load_ThrowsForDuplicateBusinessMetadataSteps()
+    {
+        using var fixture = new ConfigFixture();
+        var configPath = fixture.WriteConfig(
+            """
+            {
+              "version": 1,
+              "businessView": {
+                "orchestrators": [
+                  {
+                    "name": "Run",
+                    "steps": [
+                      { "name": "ValidateOrder" },
+                      { "name": "validateorder" }
+                    ]
+                  }
+                ]
+              }
+            }
+            """);
+
+        var ex = Assert.Throws<ConfigValidationException>(() => DurableDocConfigLoader.Load(configPath, fixture.WorkingDirectory));
+
+        Assert.Contains("Duplicate business view step names", ex.Message, StringComparison.Ordinal);
+    }
+
     private sealed class ConfigFixture : IDisposable
     {
         public ConfigFixture()

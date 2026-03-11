@@ -29,11 +29,15 @@ internal sealed class SerializableWorkflowDiagram
 
     public string? SourceFile { get; init; }
 
+    public string? SourceProjectPath { get; init; }
+
     public DateTimeOffset CreatedTimestamp { get; init; }
 
     public IReadOnlyList<SerializableWorkflowNode> Nodes { get; init; } = [];
 
     public IReadOnlyList<WorkflowEdge> Edges { get; init; } = [];
+
+    public IReadOnlyList<WorkflowIssue>? Diagnostics { get; init; }
 
     public static SerializableWorkflowDiagram From(WorkflowDiagram diagram)
     {
@@ -42,9 +46,11 @@ internal sealed class SerializableWorkflowDiagram
             Id = diagram.Id,
             OrchestratorName = diagram.OrchestratorName,
             SourceFile = diagram.SourceFile,
+            SourceProjectPath = diagram.SourceProjectPath,
             CreatedTimestamp = diagram.CreatedTimestamp,
             Nodes = diagram.Nodes.Select(SerializableWorkflowNode.From).ToArray(),
             Edges = diagram.Edges,
+            Diagnostics = diagram.Diagnostics.Count == 0 ? null : diagram.Diagnostics,
         };
     }
 }
@@ -65,6 +71,12 @@ internal sealed class SerializableWorkflowNode
 
     public bool? HideInBusiness { get; init; }
 
+    public string? Notes { get; init; }
+
+    public string? TechnicalNameOverride { get; init; }
+
+    public string? RetryHint { get; init; }
+
     public string? SourceFile { get; init; }
 
     public int LineNumber { get; init; }
@@ -80,6 +92,9 @@ internal sealed class SerializableWorkflowNode
             BusinessName = NullIfWhiteSpace(node.BusinessName),
             BusinessGroup = NullIfWhiteSpace(node.BusinessGroup),
             HideInBusiness = node.HideInBusiness ? true : null,
+            Notes = NullIfWhiteSpace(node.Notes),
+            TechnicalNameOverride = NullIfWhiteSpace(node.TechnicalNameOverride),
+            RetryHint = NullIfWhiteSpace(node.RetryHint),
             SourceFile = node.SourceFile,
             LineNumber = node.LineNumber,
         };

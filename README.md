@@ -1,46 +1,72 @@
 # durable-doc
 
-`durable-doc` is a CLI tool that will analyze Azure Durable Functions orchestration code written in C# and generate workflow diagrams.
+`durable-doc` analyzes Azure Durable Functions orchestration code written in C# and generates workflow diagrams plus a lightweight local dashboard.
 
-## Status
+## Current MVP
 
-This repository is currently in **Phase 0 (scaffolding)**. Implementation is being delivered in phases to keep architecture stable and changes easy to review.
+- CLI commands: `generate`, `list`, `validate`, `dashboard`
+- Input types: solution, project, source folder, or single `.cs` file
+- Diagram modes: `developer` and `business`
+- Renderer: Mermaid output
+- Dashboard: static offline HTML with local JS assets
+- Config: `durable-doc.json` for defaults, wrapper rules, include/exclude filters, and business-view overrides
 
-## Planned Phases
+## CLI examples
 
-1. Core parser prototype
-2. Intermediate model + Mermaid renderer
-3. Business mode + metadata
-4. CLI hardening
-5. Dashboard MVP
-6. Workflow integration
+```bash
+durable-doc list --input ./durable-doc.sln
+durable-doc validate --input ./samples/DurableDoc.Sample.Advanced/DurableDoc.Sample.Advanced.csproj --strict
+durable-doc generate --input ./samples/DurableDoc.Sample.Advanced/DurableDoc.Sample.Advanced.csproj --orchestrator RunCustomerOnboarding --mode developer --format mermaid --output ./docs/diagrams
+durable-doc dashboard --input ./docs/diagrams
+```
 
-## Repository Layout
+## Config example
+
+```json
+{
+  "version": 1,
+  "defaults": {
+    "output": "docs/diagrams",
+    "format": "mermaid"
+  },
+  "analysis": {
+    "includePatterns": ["*.cs"],
+    "excludePatterns": ["*.generated.cs"],
+    "wrappers": [
+      { "methodName": "CallActivityWithResult", "kind": "Activity", "targetNameArgumentIndex": 0 }
+    ]
+  },
+  "businessView": {
+    "orchestrators": [
+      {
+        "name": "RunCustomerOnboarding",
+        "businessName": "Customer onboarding",
+        "steps": [
+          { "name": "ValidateCustomer", "businessName": "Validate customer" },
+          { "name": "ReserveCreditCheck", "businessGroup": "Assess application" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+## Solution input behavior
+
+When `--input` points to a `.sln`, discovery is strict: only projects included in that solution are analyzed. If the orchestrator lives outside the solution, use the `.csproj` path or a folder path instead.
+
+## Repository layout
 
 ```text
 /durable-doc
   /src
-    /DurableDoc.Cli
-    /DurableDoc.Configuration
-    /DurableDoc.Analysis
-    /DurableDoc.Domain
-    /DurableDoc.Rendering.Mermaid
-    /DurableDoc.Dashboard
   /tests
-    /DurableDoc.Configuration.Tests
-    /DurableDoc.Analysis.Tests
-    /DurableDoc.Domain.Tests
-    /DurableDoc.Rendering.Tests
-    /DurableDoc.Cli.Tests
   /samples
-    /DurableDoc.Sample.Simple
-    /DurableDoc.Sample.Advanced
-  /docs
-    /examples
+  /docs/examples
 ```
 
-## Phase 0 Scope Notes
+## Verification
 
-- CLI command surface is scaffolded (`generate`, `list`, `validate`, `dashboard`)
-- Projects and tests are placeholders to establish boundaries
-- No Roslyn analysis, rendering logic, dashboard implementation, or config behavior is implemented yet
+```bash
+dotnet test durable-doc.sln
+```
