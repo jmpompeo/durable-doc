@@ -17,6 +17,9 @@ public sealed class WorkflowNode
     public string Id { get; init; } = string.Empty;
     public WorkflowNodeType NodeType { get; init; }
     public string Name { get; init; } = string.Empty;
+    public string? BusinessName { get; init; }
+    public string? BusinessGroup { get; init; }
+    public bool HideInBusiness { get; init; }
     public string? SourceFile { get; init; }
     public int LineNumber { get; init; }
 }
@@ -36,5 +39,8 @@ public enum WorkflowNodeType
     RetryActivity,
     ExternalEvent,
     Timer,
+    FanOut,
+    FanIn,
+    Decision,
     Wrapper,
 }
