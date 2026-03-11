@@ -7,6 +7,53 @@ namespace DurableDoc.Analysis.Tests;
 public class SmokeTests
 {
     [Fact]
+    public async Task AnalyzeAsync_OnAdvancedSample_DiscoversMainAndSubOrchestrations()
+    {
+        var analyzer = new WorkflowAnalyzer();
+
+        var diagrams = await analyzer.AnalyzeAsync(SampleProjectLocator.GetAdvancedSampleProjectPath());
+
+        Assert.Equal(
+            [
+                "CollectDocumentsSubOrchestrator",
+                "ProvisionAccountSubOrchestrator",
+                "RunCustomerOnboarding",
+                "ScheduleFollowUpSubOrchestrator",
+            ],
+            diagrams.Select(diagram => diagram.OrchestratorName).ToArray());
+
+        var mainDiagram = Assert.Single(diagrams, diagram => diagram.OrchestratorName == "RunCustomerOnboarding");
+
+        Assert.Equal(
+            [
+                WorkflowNodeType.OrchestratorStart,
+                WorkflowNodeType.Activity,
+                WorkflowNodeType.Activity,
+                WorkflowNodeType.RetryActivity,
+                WorkflowNodeType.SubOrchestrator,
+                WorkflowNodeType.SubOrchestrator,
+                WorkflowNodeType.ExternalEvent,
+                WorkflowNodeType.Timer,
+                WorkflowNodeType.Activity,
+            ],
+            mainDiagram.Nodes.Select(node => node.NodeType).ToArray());
+
+        Assert.Equal(
+            [
+                "RunCustomerOnboarding",
+                "LoadApplication",
+                "ValidateCustomer",
+                "ReserveCreditCheck",
+                "CollectDocumentsSubOrchestrator",
+                "ProvisionAccountSubOrchestrator",
+                "WaitForCustomerApproval",
+                "CreateTimer",
+                "SendWelcomeEmail",
+            ],
+            mainDiagram.Nodes.Select(node => node.DisplayLabel).ToArray());
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_DiscoversOrchestratorAndDurableCalls()
     {
         using var fixture = new TempSourceFixture("""
@@ -120,5 +167,30 @@ internal sealed class TempSourceFixture : IDisposable
         {
             Directory.Delete(DirectoryPath, recursive: true);
         }
+    }
+}
+
+internal static class SampleProjectLocator
+{
+    public static string GetAdvancedSampleProjectPath()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (directory is not null)
+        {
+            var solutionPath = Path.Combine(directory.FullName, "durable-doc.sln");
+            if (File.Exists(solutionPath))
+            {
+                return Path.Combine(
+                    directory.FullName,
+                    "samples",
+                    "DurableDoc.Sample.Advanced",
+                    "DurableDoc.Sample.Advanced.csproj");
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not locate the durable-doc solution root.");
     }
 }

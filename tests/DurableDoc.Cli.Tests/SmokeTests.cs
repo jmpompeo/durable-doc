@@ -224,6 +224,75 @@ public class Demo
         Assert.Equal(string.Empty, error.ToString());
     }
 
+    [Fact]
+    public async Task Generate_on_advanced_sample_project_produces_multiple_diagrams_for_manual_verification()
+    {
+        using var outputFixture = new OutputFixture();
+
+        var exitCode = await DurableDoc.Cli.GenerateCommandHandler.ExecuteAsync(
+            GetAdvancedSampleProjectPath(),
+            outputFixture.OutputDirectory,
+            orchestratorName: null,
+            mode: "developer",
+            configPath: null);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(4, Directory.EnumerateFiles(outputFixture.OutputDirectory, "*.mmd").Count());
+        Assert.Equal(4, Directory.EnumerateFiles(outputFixture.OutputDirectory, "*.diagram.json").Count());
+
+        var mainDiagramPath = Directory.EnumerateFiles(outputFixture.OutputDirectory, "*runcustomeronboarding*.mmd").Single();
+        var mermaid = File.ReadAllText(mainDiagramPath);
+        var dashboard = File.ReadAllText(Path.Combine(outputFixture.OutputDirectory, "index.html"));
+
+        Assert.Contains("LoadApplication", mermaid);
+        Assert.Contains("{{\"ReserveCreditCheck\"}}", mermaid);
+        Assert.Contains("[[\"WaitForCustomerApproval\"]]", mermaid);
+        Assert.Contains("[/\"CreateTimer\"/]", mermaid);
+        Assert.Contains("CollectDocumentsSubOrchestrator", mermaid);
+        Assert.Contains("ProvisionAccountSubOrchestrator", dashboard);
+        Assert.Contains("ScheduleFollowUpSubOrchestrator", dashboard);
+    }
+
+    [Fact]
+    public async Task Validate_on_advanced_sample_project_succeeds_without_warnings()
+    {
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var context = new DurableDoc.Cli.CliCommandContext(output, error, DurableDoc.Cli.CliVerbosity.Detailed, ci: false);
+
+        var exitCode = await DurableDoc.Cli.ValidateCommandHandler.ExecuteAsync(
+            GetAdvancedSampleProjectPath(),
+            configPath: null,
+            strict: true,
+            context: context);
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("Validation succeeded for 4 orchestrator(s).", output.ToString());
+        Assert.Equal(string.Empty, error.ToString());
+    }
+
+    [Fact]
+    public async Task List_on_advanced_sample_project_reports_all_manual_test_orchestrations()
+    {
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var context = new DurableDoc.Cli.CliCommandContext(output, error, DurableDoc.Cli.CliVerbosity.Normal, ci: false);
+
+        var exitCode = await DurableDoc.Cli.ListCommandHandler.ExecuteAsync(
+            GetAdvancedSampleProjectPath(),
+            orchestratorName: null,
+            configPath: null,
+            context: context);
+
+        Assert.Equal(0, exitCode);
+
+        var lines = output.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(4, lines.Length);
+        Assert.Contains(lines, line => line.StartsWith("RunCustomerOnboarding | ", StringComparison.Ordinal));
+        Assert.Contains(lines, line => line.Contains("activities=4", StringComparison.Ordinal) && line.Contains("subOrchestrators=2", StringComparison.Ordinal));
+        Assert.Equal(string.Empty, error.ToString());
+    }
+
     private sealed class CliFixture : IDisposable
     {
         private readonly string _rootDirectory;
@@ -250,5 +319,46 @@ public class Demo
                 Directory.Delete(_rootDirectory, recursive: true);
             }
         }
+    }
+
+    private sealed class OutputFixture : IDisposable
+    {
+        public OutputFixture()
+        {
+            OutputDirectory = Path.Combine(Path.GetTempPath(), "durable-doc-cli-output", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(OutputDirectory);
+        }
+
+        public string OutputDirectory { get; }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(OutputDirectory))
+            {
+                Directory.Delete(OutputDirectory, recursive: true);
+            }
+        }
+    }
+
+    private static string GetAdvancedSampleProjectPath()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (directory is not null)
+        {
+            var solutionPath = Path.Combine(directory.FullName, "durable-doc.sln");
+            if (File.Exists(solutionPath))
+            {
+                return Path.Combine(
+                    directory.FullName,
+                    "samples",
+                    "DurableDoc.Sample.Advanced",
+                    "DurableDoc.Sample.Advanced.csproj");
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not locate the durable-doc solution root.");
     }
 }

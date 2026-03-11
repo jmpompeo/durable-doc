@@ -2,6 +2,15 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <RootNamespace>DurableDoc.Cli</RootNamespace>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>durable-doc</ToolCommandName>
+    <PackageId>durable-doc</PackageId>
+    <Version>0.1.0</Version>
+    <PackageVersion>0.1.0</PackageVersion>
+    <PackageTitle>durable-doc</PackageTitle>
+    <Description>CLI tool for analyzing Azure Durable Functions orchestrations and generating workflow diagrams.</Description>
+    <Authors>OpenAI</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\DurableDoc.Analysis\DurableDoc.Analysis.csproj" />
