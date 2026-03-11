@@ -1,0 +1,41 @@
+{
+  "Id": "customer-onboarding",
+  "OrchestratorName": "CustomerOnboarding",
+  "SourceFile": "src/Orchestrators/CustomerOnboarding.cs",
+  "CreatedTimestamp": "2025-01-15T09:30:00+00:00",
+  "Nodes": [
+    {
+      "Id": "n1",
+      "DisplayLabel": "Start onboarding",
+      "NodeType": "OrchestratorStart",
+      "SourceFile": "src/Orchestrators/CustomerOnboarding.cs",
+      "LineNumber": 10
+    },
+    {
+      "Id": "n2",
+      "DisplayLabel": "Validate request",
+      "NodeType": "Activity",
+      "SourceFile": "src/Orchestrators/CustomerOnboarding.cs",
+      "LineNumber": 18
+    },
+    {
+      "Id": "n3",
+      "DisplayLabel": "Approval received",
+      "NodeType": "ExternalEvent",
+      "SourceFile": "src/Orchestrators/CustomerOnboarding.cs",
+      "LineNumber": 42
+    }
+  ],
+  "Edges": [
+    {
+      "FromNodeId": "n1",
+      "ToNodeId": "n2",
+      "ConditionLabel": "default"
+    },
+    {
+      "FromNodeId": "n2",
+      "ToNodeId": "n3",
+      "ConditionLabel": "approved"
+    }
+  ]
+}
