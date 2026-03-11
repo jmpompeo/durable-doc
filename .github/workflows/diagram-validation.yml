@@ -1,0 +1,36 @@
+name: diagram-validation
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate-and-generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore durable-doc.sln
+
+      - name: Build CLI
+        run: dotnet build durable-doc.sln --configuration Release --no-restore
+
+      - name: Validate advanced sample
+        run: dotnet run --project ./src/DurableDoc.Cli -- validate --input ./samples/DurableDoc.Sample.Advanced/DurableDoc.Sample.Advanced.csproj --strict
+
+      - name: Generate developer diagrams
+        run: dotnet run --project ./src/DurableDoc.Cli -- generate --input ./samples/DurableDoc.Sample.Advanced/DurableDoc.Sample.Advanced.csproj --mode developer --format mermaid --output ./docs/diagrams
+
+      - name: Generate business diagrams
+        run: dotnet run --project ./src/DurableDoc.Cli -- generate --input ./samples/DurableDoc.Sample.Advanced/DurableDoc.Sample.Advanced.csproj --mode business --format mermaid --output ./docs/diagrams
+
+      - name: Upload generated diagrams
+        uses: actions/upload-artifact@v4
+        with:
+          name: durable-doc-diagrams
+          path: docs/diagrams

@@ -29,13 +29,19 @@ public class Demo
         Assert.Equal(0, exitCode);
         Assert.Single(Directory.EnumerateFiles(fixture.OutputDirectory, "*.mmd"));
         Assert.Single(Directory.EnumerateFiles(fixture.OutputDirectory, "*.diagram.json"));
+        Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "mermaid.min.js")));
 
         var mermaid = File.ReadAllText(Directory.EnumerateFiles(fixture.OutputDirectory, "*.mmd").Single());
         var dashboard = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "index.html"));
+        var bundle = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "mermaid.min.js"));
 
         Assert.Contains("flowchart TD", mermaid);
         Assert.Contains("First", dashboard);
         Assert.Contains("\"mode\":\"developer\"", dashboard, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("__PAYLOAD__", dashboard, StringComparison.Ordinal);
+        Assert.DoesNotContain("{{payload}}", dashboard, StringComparison.Ordinal);
+        Assert.Contains(@"source.split(/\r?\n/)", bundle, StringComparison.Ordinal);
+        Assert.DoesNotContain(@"<br\\/>", bundle, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -78,6 +84,40 @@ public class Demo
     }
 
     [Fact]
+    public async Task Generate_reports_discovered_orchestrators_when_filter_does_not_match()
+    {
+        using var fixture = new CliFixture(
+            """
+using System.Threading.Tasks;
+
+public class Demo
+{
+    [OrchestrationTrigger]
+    public async Task First(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ValidateOrder");
+    }
+}
+""");
+
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var context = new DurableDoc.Cli.CliCommandContext(output, error, DurableDoc.Cli.CliVerbosity.Normal, ci: false);
+
+        var exitCode = await DurableDoc.Cli.GenerateCommandHandler.ExecuteAsync(
+            fixture.SourceDirectory,
+            fixture.OutputDirectory,
+            orchestratorName: "Missing",
+            mode: "developer",
+            configPath: null,
+            context: context);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("No orchestrators matched filter 'Missing'.", error.ToString(), StringComparison.Ordinal);
+        Assert.Contains("First", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Dashboard_rebuilds_static_html_from_existing_artifacts()
     {
         using var fixture = new CliFixture(
@@ -114,6 +154,7 @@ public class Demo
         Assert.Contains("Filter by orchestrator", dashboard);
         Assert.Contains("Run", dashboard);
         Assert.Contains("mermaid.min.js", dashboard);
+        Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "mermaid.min.js")));
     }
 
     [Fact]
@@ -155,6 +196,8 @@ public class Demo
         Assert.Equal(2, lines.Length);
         Assert.StartsWith("Alpha | ", lines[0], StringComparison.Ordinal);
         Assert.StartsWith("Beta | ", lines[1], StringComparison.Ordinal);
+        Assert.Contains("activities=ValidateOrder", lines[0], StringComparison.Ordinal);
+        Assert.Contains("subOrchestrators=Child", lines[1], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -187,6 +230,54 @@ public class Demo
         Assert.Equal(1, exitCode);
         Assert.Contains("warning:Run:", error.ToString(), StringComparison.Ordinal);
         Assert.Contains("error:Validation completed with warnings", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Validate_warns_when_business_metadata_references_missing_step()
+    {
+        using var fixture = new CliFixture(
+            """
+using System.Threading.Tasks;
+
+public class Demo
+{
+    [OrchestrationTrigger]
+    public async Task Run(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ValidateOrder");
+    }
+}
+""");
+
+        var configPath = fixture.WriteConfig(
+            """
+            {
+              "version": 1,
+              "businessView": {
+                "orchestrators": [
+                  {
+                    "name": "Run",
+                    "steps": [
+                      { "name": "MissingStep", "businessName": "Missing step" }
+                    ]
+                  }
+                ]
+              }
+            }
+            """);
+
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var context = new DurableDoc.Cli.CliCommandContext(output, error, DurableDoc.Cli.CliVerbosity.Normal, ci: false);
+
+        var exitCode = await DurableDoc.Cli.ValidateCommandHandler.ExecuteAsync(
+            fixture.SourceDirectory,
+            configPath: configPath,
+            strict: false,
+            context: context);
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("MissingStep", error.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -254,6 +345,45 @@ public class Demo
     }
 
     [Fact]
+    public async Task Generate_uses_config_default_output_and_mermaid_format()
+    {
+        using var fixture = new CliFixture(
+            """
+using System.Threading.Tasks;
+
+public class Demo
+{
+    [OrchestrationTrigger]
+    public async Task Run(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ValidateOrder");
+    }
+}
+""");
+
+        var configPath = fixture.WriteConfig(
+            $$"""
+            {
+              "version": 1,
+              "defaults": {
+                "output": "{{fixture.OutputDirectory}}",
+                "format": "mermaid"
+              }
+            }
+            """);
+
+        var exitCode = await DurableDoc.Cli.GenerateCommandHandler.ExecuteAsync(
+            fixture.SourceDirectory,
+            outputDirectory: null,
+            orchestratorName: null,
+            mode: "developer",
+            configPath: configPath);
+
+        Assert.Equal(0, exitCode);
+        Assert.Single(Directory.EnumerateFiles(fixture.OutputDirectory, "*.mmd"));
+    }
+
+    [Fact]
     public async Task Validate_on_advanced_sample_project_succeeds_without_warnings()
     {
         var output = new StringWriter();
@@ -289,7 +419,26 @@ public class Demo
         var lines = output.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal(4, lines.Length);
         Assert.Contains(lines, line => line.StartsWith("RunCustomerOnboarding | ", StringComparison.Ordinal));
-        Assert.Contains(lines, line => line.Contains("activities=4", StringComparison.Ordinal) && line.Contains("subOrchestrators=2", StringComparison.Ordinal));
+        Assert.Contains(lines, line => line.Contains("activities=LoadApplication, ReserveCreditCheck, SendWelcomeEmail, ValidateCustomer", StringComparison.Ordinal));
+        Assert.Contains(lines, line => line.Contains("subOrchestrators=CollectDocumentsSubOrchestrator, ProvisionAccountSubOrchestrator", StringComparison.Ordinal));
+        Assert.Equal(string.Empty, error.ToString());
+    }
+
+    [Fact]
+    public async Task List_on_solution_input_discovers_sample_projects()
+    {
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var context = new DurableDoc.Cli.CliCommandContext(output, error, DurableDoc.Cli.CliVerbosity.Normal, ci: false);
+
+        var exitCode = await DurableDoc.Cli.ListCommandHandler.ExecuteAsync(
+            GetSolutionPath(),
+            orchestratorName: "RunCustomerOnboarding",
+            configPath: null,
+            context: context);
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("RunCustomerOnboarding | ", output.ToString(), StringComparison.Ordinal);
         Assert.Equal(string.Empty, error.ToString());
     }
 
@@ -311,6 +460,13 @@ public class Demo
         public string SourceDirectory { get; }
 
         public string OutputDirectory { get; }
+
+        public string WriteConfig(string json)
+        {
+            var path = Path.Combine(_rootDirectory, "durable-doc.json");
+            File.WriteAllText(path, json);
+            return path;
+        }
 
         public void Dispose()
         {
@@ -349,11 +505,25 @@ public class Demo
             var solutionPath = Path.Combine(directory.FullName, "durable-doc.sln");
             if (File.Exists(solutionPath))
             {
-                return Path.Combine(
-                    directory.FullName,
-                    "samples",
-                    "DurableDoc.Sample.Advanced",
-                    "DurableDoc.Sample.Advanced.csproj");
+                return Path.Combine(directory.FullName, "samples", "DurableDoc.Sample.Advanced", "DurableDoc.Sample.Advanced.csproj");
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not locate the durable-doc solution root.");
+    }
+
+    private static string GetSolutionPath()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (directory is not null)
+        {
+            var solutionPath = Path.Combine(directory.FullName, "durable-doc.sln");
+            if (File.Exists(solutionPath))
+            {
+                return solutionPath;
             }
 
             directory = directory.Parent;

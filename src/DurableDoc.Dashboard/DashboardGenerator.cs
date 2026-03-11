@@ -11,12 +11,17 @@ public sealed class GeneratedDiagramArtifact
     public DateTimeOffset GeneratedAt { get; init; }
     public string Mermaid { get; init; } = string.Empty;
     public string MermaidFileName { get; init; } = string.Empty;
+    public string? SourceFile { get; init; }
+    public string? SourceProjectPath { get; init; }
+    public IReadOnlyList<string> Warnings { get; init; } = [];
 }
 
 public sealed record DashboardBuildResult(string DashboardPath, int DiagramCount);
 
 public static class DashboardGenerator
 {
+    private const string MermaidBundleFileName = "mermaid.min.js";
+
     public static DashboardBuildResult WriteArtifactsAndBuild(string outputDirectory, IEnumerable<GeneratedDiagramArtifact> diagrams)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(outputDirectory);
@@ -63,8 +68,10 @@ public static class DashboardGenerator
 
     private static DashboardBuildResult WriteDashboard(string outputDirectory, IReadOnlyList<GeneratedDiagramArtifact> diagrams)
     {
+        File.WriteAllText(Path.Combine(outputDirectory, MermaidBundleFileName), MermaidCompatibilityBundle.Render());
+
         var dashboardPath = Path.Combine(outputDirectory, "index.html");
-        File.WriteAllText(dashboardPath, DashboardHtmlTemplate.Render(diagrams));
+        File.WriteAllText(dashboardPath, DashboardHtmlTemplate.Render(diagrams, MermaidBundleFileName));
         return new DashboardBuildResult(dashboardPath, diagrams.Count);
     }
 }
@@ -91,6 +98,9 @@ internal static class DiagramArtifactStore
             GeneratedAt = artifact.GeneratedAt,
             Mermaid = artifact.Mermaid,
             MermaidFileName = mermaidFileName,
+            SourceFile = artifact.SourceFile,
+            SourceProjectPath = artifact.SourceProjectPath,
+            Warnings = artifact.Warnings,
         };
 
         File.WriteAllText(Path.Combine(outputDirectory, mermaidFileName), artifact.Mermaid);
@@ -136,7 +146,7 @@ internal static class DiagramArtifactStore
 
 internal static class DashboardHtmlTemplate
 {
-    public static string Render(IReadOnlyList<GeneratedDiagramArtifact> diagrams)
+    public static string Render(IReadOnlyList<GeneratedDiagramArtifact> diagrams, string mermaidBundleFileName)
     {
         var payload = JsonSerializer.Serialize(diagrams, new JsonSerializerOptions
         {
@@ -144,7 +154,7 @@ internal static class DashboardHtmlTemplate
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         }).Replace("</", "<\\/", StringComparison.Ordinal);
 
-        return $$"""
+        return """
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -161,6 +171,8 @@ internal static class DashboardHtmlTemplate
       --accent: #0f766e;
       --accent-soft: #dff4ef;
       --line: #d9d0c4;
+      --warning: #92400e;
+      --warning-soft: #fef3c7;
       --shadow: 0 18px 50px rgba(17, 24, 39, 0.10);
     }
 
@@ -196,16 +208,30 @@ internal static class DashboardHtmlTemplate
       padding: 24px;
     }
 
+    .viewer {
+      padding: 24px;
+      display: grid;
+      gap: 16px;
+      align-content: start;
+      min-width: 0;
+    }
+
     h1 {
       margin: 0 0 8px;
       font-size: clamp(1.8rem, 3vw, 2.5rem);
       line-height: 1;
     }
 
-    .lede {
-      margin: 0 0 18px;
+    h2 {
+      margin: 6px 0 0;
+    }
+
+    .lede,
+    .meta,
+    .hint,
+    .empty {
       color: var(--muted);
-      font-size: 0.98rem;
+      font-size: 0.94rem;
     }
 
     .filters {
@@ -241,6 +267,7 @@ internal static class DashboardHtmlTemplate
       padding: 14px;
       cursor: pointer;
       transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+      min-width: 0;
     }
 
     .result:hover,
@@ -254,19 +281,16 @@ internal static class DashboardHtmlTemplate
       display: block;
       margin-bottom: 4px;
       font-size: 1rem;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
 
-    .meta,
-    .empty {
-      color: var(--muted);
-      font-size: 0.9rem;
-    }
-
-    .viewer {
-      padding: 24px;
-      display: grid;
-      gap: 16px;
-      align-content: start;
+    .result .meta {
+      display: block;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
 
     .viewer-header {
@@ -274,7 +298,12 @@ internal static class DashboardHtmlTemplate
       flex-wrap: wrap;
       gap: 12px;
       justify-content: space-between;
-      align-items: baseline;
+      align-items: flex-start;
+      min-width: 0;
+    }
+
+    .viewer-header > div:first-child {
+      min-width: 0;
     }
 
     .badge {
@@ -290,6 +319,74 @@ internal static class DashboardHtmlTemplate
       text-transform: uppercase;
     }
 
+    .mode-switcher {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .mode-switcher button {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      color: var(--ink);
+      padding: 8px 14px;
+      cursor: pointer;
+      font: inherit;
+    }
+
+    .mode-switcher button.active {
+      border-color: rgba(15, 118, 110, 0.35);
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .details-grid {
+      display: grid;
+      gap: 8px;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: #fff;
+      padding: 16px 18px;
+      min-width: 0;
+    }
+
+    .detail-row {
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
+      min-width: 0;
+    }
+
+    .detail-label {
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .detail-value {
+      min-width: 0;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .warnings {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .warnings li {
+      border-radius: 14px;
+      background: var(--warning-soft);
+      color: var(--warning);
+      padding: 10px 12px;
+    }
+
     #diagram {
       min-height: 360px;
       overflow: auto;
@@ -302,6 +399,8 @@ internal static class DashboardHtmlTemplate
     #source {
       margin: 0;
       white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
       border: 1px solid var(--line);
       border-radius: 20px;
       background: #f8f6f1;
@@ -311,10 +410,48 @@ internal static class DashboardHtmlTemplate
       font-size: 0.9rem;
     }
 
-    .hint {
-      margin: 0;
+    .mermaid-local {
+      display: grid;
+      gap: 18px;
+    }
+
+    .mermaid-node-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .mermaid-node {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 12px;
+      background: #faf7f2;
+      min-width: 0;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .mermaid-node div {
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .mermaid-node small {
+      display: block;
+      margin-bottom: 6px;
       color: var(--muted);
-      font-size: 0.92rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .mermaid-edges {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
 
     @media (max-width: 960px) {
@@ -336,9 +473,10 @@ internal static class DashboardHtmlTemplate
       <div class="filters">
         <input id="orchestrator-filter" type="search" placeholder="Filter by orchestrator">
         <select id="mode-filter">
-          <option value="">All modes</option>
-          <option value="developer">Developer</option>
-          <option value="business">Business</option>
+          <option value="">All mode availability</option>
+          <option value="developer">Has developer mode</option>
+          <option value="business">Has business mode</option>
+          <option value="both">Has both modes</option>
         </select>
       </div>
       <div id="results" class="results"></div>
@@ -350,44 +488,85 @@ internal static class DashboardHtmlTemplate
           <div id="selected-mode" class="badge">No selection</div>
           <h2 id="selected-title">Select a generated diagram</h2>
         </div>
-        <p id="selected-timestamp" class="meta"></p>
+        <div id="mode-switcher" class="mode-switcher"></div>
       </div>
-      <p class="hint">The dashboard is fully static. Open this file in a browser after running <code>durable-doc generate</code> or <code>durable-doc dashboard</code>.</p>
+      <p class="hint">The dashboard is fully static and local. Open this file after running <code>durable-doc generate</code> or <code>durable-doc dashboard</code>.</p>
+      <div id="details" class="details-grid"></div>
+      <ul id="warnings" class="warnings"></ul>
       <div id="diagram"></div>
       <pre id="source"></pre>
     </main>
   </div>
 
-  <script id="dashboard-data" type="application/json">{{payload}}</script>
-  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script id="dashboard-data" type="application/json">__PAYLOAD__</script>
+  <script src="__MERMAID_BUNDLE__"></script>
   <script>
     const diagrams = JSON.parse(document.getElementById('dashboard-data').textContent);
     const resultsEl = document.getElementById('results');
     const titleEl = document.getElementById('selected-title');
     const modeEl = document.getElementById('selected-mode');
-    const timestampEl = document.getElementById('selected-timestamp');
+    const detailsEl = document.getElementById('details');
     const diagramEl = document.getElementById('diagram');
     const sourceEl = document.getElementById('source');
+    const warningsEl = document.getElementById('warnings');
     const orchestratorFilterEl = document.getElementById('orchestrator-filter');
     const modeFilterEl = document.getElementById('mode-filter');
+    const modeSwitcherEl = document.getElementById('mode-switcher');
 
-    let filtered = diagrams.slice();
-    let selectedKey = filtered[0] ? filtered[0].diagramId + ':' + filtered[0].mode : '';
+    const groups = groupDiagrams(diagrams);
+    let filtered = groups.slice();
+    let selectedOrchestrator = filtered[0] ? filtered[0].orchestratorName : '';
+    let selectedMode = filtered[0] && filtered[0].modes[0] ? filtered[0].modes[0].mode : '';
 
     mermaid.initialize({ startOnLoad: false, securityLevel: 'loose' });
+
+    function groupDiagrams(items) {
+      const grouped = new Map();
+
+      items.forEach((diagram) => {
+        const existing = grouped.get(diagram.orchestratorName) || {
+          orchestratorName: diagram.orchestratorName,
+          sourceFile: diagram.sourceFile || '',
+          sourceProjectPath: diagram.sourceProjectPath || '',
+          modes: []
+        };
+
+        const existingMode = existing.modes.find((entry) => entry.mode === diagram.mode);
+        if (!existingMode || new Date(existingMode.generatedAt) < new Date(diagram.generatedAt)) {
+          existing.modes = existing.modes.filter((entry) => entry.mode !== diagram.mode).concat([diagram]);
+        }
+
+        existing.modes.sort((left, right) => left.mode.localeCompare(right.mode));
+        grouped.set(diagram.orchestratorName, existing);
+      });
+
+      return Array.from(grouped.values()).sort((left, right) => left.orchestratorName.localeCompare(right.orchestratorName));
+    }
 
     function applyFilters() {
       const nameFilter = orchestratorFilterEl.value.trim().toLowerCase();
       const modeFilter = modeFilterEl.value;
 
-      filtered = diagrams.filter((diagram) => {
-        const matchesName = diagram.orchestratorName.toLowerCase().includes(nameFilter);
-        const matchesMode = modeFilter === '' || diagram.mode === modeFilter;
+      filtered = groups.filter((group) => {
+        const matchesName = group.orchestratorName.toLowerCase().includes(nameFilter);
+        const hasDeveloper = group.modes.some((entry) => entry.mode === 'developer');
+        const hasBusiness = group.modes.some((entry) => entry.mode === 'business');
+        const matchesMode =
+          modeFilter === '' ||
+          (modeFilter === 'developer' && hasDeveloper) ||
+          (modeFilter === 'business' && hasBusiness) ||
+          (modeFilter === 'both' && hasDeveloper && hasBusiness);
+
         return matchesName && matchesMode;
       });
 
-      if (!filtered.some((diagram) => diagram.diagramId + ':' + diagram.mode === selectedKey)) {
-        selectedKey = filtered[0] ? filtered[0].diagramId + ':' + filtered[0].mode : '';
+      if (!filtered.some((group) => group.orchestratorName === selectedOrchestrator)) {
+        selectedOrchestrator = filtered[0] ? filtered[0].orchestratorName : '';
+      }
+
+      const selectedGroup = filtered.find((group) => group.orchestratorName === selectedOrchestrator);
+      if (!selectedGroup || !selectedGroup.modes.some((entry) => entry.mode === selectedMode)) {
+        selectedMode = selectedGroup && selectedGroup.modes[0] ? selectedGroup.modes[0].mode : '';
       }
 
       renderResults();
@@ -405,24 +584,28 @@ internal static class DashboardHtmlTemplate
         return;
       }
 
-      filtered.forEach((diagram) => {
+      filtered.forEach((group) => {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'result';
-        if (diagram.diagramId + ':' + diagram.mode === selectedKey) {
+        if (group.orchestratorName === selectedOrchestrator) {
           button.classList.add('active');
         }
 
+        const modes = group.modes.map((entry) => entry.mode).join(', ');
         button.innerHTML =
           '<strong></strong>' +
-          '<div class="meta"></div>' +
-          '<div class="meta"></div>';
+          '<span class="meta"></span>' +
+          '<span class="meta"></span>';
 
-        button.querySelector('strong').textContent = diagram.orchestratorName;
-        button.querySelectorAll('.meta')[0].textContent = diagram.mode + ' mode';
-        button.querySelectorAll('.meta')[1].textContent = new Date(diagram.generatedAt).toLocaleString();
+        button.querySelector('strong').textContent = group.orchestratorName;
+        button.querySelectorAll('.meta')[0].textContent = 'Modes: ' + modes;
+        button.querySelectorAll('.meta')[1].textContent = group.sourceProjectPath || group.sourceFile || 'Source unknown';
         button.addEventListener('click', () => {
-          selectedKey = diagram.diagramId + ':' + diagram.mode;
+          selectedOrchestrator = group.orchestratorName;
+          if (!group.modes.some((entry) => entry.mode === selectedMode)) {
+            selectedMode = group.modes[0].mode;
+          }
           renderResults();
           renderSelection();
         });
@@ -432,21 +615,71 @@ internal static class DashboardHtmlTemplate
     }
 
     function renderSelection() {
-      const selected = filtered.find((diagram) => diagram.diagramId + ':' + diagram.mode === selectedKey);
+      const group = filtered.find((entry) => entry.orchestratorName === selectedOrchestrator);
+      const selected = group ? group.modes.find((entry) => entry.mode === selectedMode) : null;
 
-      if (!selected) {
+      if (!group || !selected) {
         modeEl.textContent = 'No selection';
         titleEl.textContent = 'Select a generated diagram';
-        timestampEl.textContent = '';
+        detailsEl.innerHTML = '';
+        warningsEl.innerHTML = '';
         diagramEl.innerHTML = '';
         sourceEl.textContent = '';
+        modeSwitcherEl.innerHTML = '';
         return;
       }
 
       modeEl.textContent = selected.mode + ' mode';
-      titleEl.textContent = selected.orchestratorName;
-      timestampEl.textContent = 'Generated ' + new Date(selected.generatedAt).toLocaleString();
+      titleEl.textContent = group.orchestratorName;
       sourceEl.textContent = selected.mermaid;
+
+      modeSwitcherEl.innerHTML = '';
+      group.modes.forEach((entry) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = entry.mode + ' mode';
+        if (entry.mode === selectedMode) {
+          button.classList.add('active');
+        }
+
+        button.addEventListener('click', () => {
+          selectedMode = entry.mode;
+          renderSelection();
+          renderResults();
+        });
+
+        modeSwitcherEl.appendChild(button);
+      });
+
+      detailsEl.innerHTML = '';
+      [
+        ['Generated', new Date(selected.generatedAt).toLocaleString()],
+        ['Source file', selected.sourceFile || 'Unknown'],
+        ['Source project', selected.sourceProjectPath || 'Unknown'],
+        ['Artifact file', selected.mermaidFileName || 'Unknown']
+      ].forEach(([label, value]) => {
+        const row = document.createElement('div');
+        row.className = 'detail-row';
+
+        const labelEl = document.createElement('span');
+        labelEl.className = 'detail-label';
+        labelEl.textContent = label + ':';
+
+        const valueEl = document.createElement('span');
+        valueEl.className = 'detail-value';
+        valueEl.textContent = value;
+
+        row.appendChild(labelEl);
+        row.appendChild(valueEl);
+        detailsEl.appendChild(row);
+      });
+
+      warningsEl.innerHTML = '';
+      (selected.warnings || []).forEach((warning) => {
+        const item = document.createElement('li');
+        item.textContent = warning;
+        warningsEl.appendChild(item);
+      });
 
       diagramEl.innerHTML = '';
       const container = document.createElement('pre');
@@ -467,6 +700,105 @@ internal static class DashboardHtmlTemplate
   </script>
 </body>
 </html>
+"""
+            .Replace("__PAYLOAD__", payload, StringComparison.Ordinal)
+            .Replace("__MERMAID_BUNDLE__", mermaidBundleFileName, StringComparison.Ordinal);
+    }
+}
+
+internal static class MermaidCompatibilityBundle
+{
+    public static string Render()
+    {
+        return """
+(function (global) {
+  function decodeLabel(value) {
+    return value
+      .replace(/\\"/g, '"')
+      .replace(/<br\/>/g, ' ')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function inferType(shape) {
+    if (shape.indexOf('{{') >= 0) return 'retry';
+    if (shape.indexOf('[[') >= 0) return 'external event';
+    if (shape.indexOf('[/') >= 0) return 'timer';
+    if (shape.indexOf('((') >= 0) return 'parallel';
+    if (shape.indexOf('{"') >= 0 || shape.indexOf('{') >= 0) return 'decision';
+    if (shape.indexOf('([') >= 0) return 'orchestrator';
+    return 'step';
+  }
+
+  function parse(source) {
+    var nodeRegex = /^\s*([A-Za-z0-9_]+)\s*(.+)$/;
+    var edgeRegex = /^\s*([A-Za-z0-9_]+)\s*-->\s*(?:\|([^|]*)\|\s*)?([A-Za-z0-9_]+)\s*$/;
+    var labelRegex = /"((?:\\.|[^"])*)"/;
+    var nodes = [];
+    var edges = [];
+
+    source.split(/\r?\n/).forEach(function (line) {
+      if (!line || line.indexOf('flowchart') === 0) {
+        return;
+      }
+
+      var edgeMatch = line.match(edgeRegex);
+      if (edgeMatch) {
+        edges.push({ from: edgeMatch[1], label: edgeMatch[2] || '', to: edgeMatch[3] });
+        return;
+      }
+
+      var nodeMatch = line.match(nodeRegex);
+      if (!nodeMatch) {
+        return;
+      }
+
+      var shape = nodeMatch[2];
+      var labelMatch = shape.match(labelRegex);
+      nodes.push({
+        id: nodeMatch[1],
+        label: decodeLabel(labelMatch ? labelMatch[1] : nodeMatch[1]),
+        type: inferType(shape)
+      });
+    });
+
+    return { nodes: nodes, edges: edges };
+  }
+
+  function render(container, source) {
+    var parsed = parse(source);
+    var nodeIndex = {};
+    parsed.nodes.forEach(function (node) { nodeIndex[node.id] = node; });
+
+    var nodeHtml = parsed.nodes.map(function (node) {
+      return '<div class="mermaid-node"><small>' + node.type + '</small><div>' + node.label + '</div></div>';
+    }).join('');
+
+    var edgeHtml = parsed.edges.map(function (edge) {
+      var from = nodeIndex[edge.from] ? nodeIndex[edge.from].label : edge.from;
+      var to = nodeIndex[edge.to] ? nodeIndex[edge.to].label : edge.to;
+      var label = edge.label ? ' [' + edge.label + ']' : '';
+      return '<li>' + from + label + ' -> ' + to + '</li>';
+    }).join('');
+
+    container.innerHTML =
+      '<div class="mermaid-local">' +
+        '<div class="mermaid-node-grid">' + nodeHtml + '</div>' +
+        '<ol class="mermaid-edges">' + edgeHtml + '</ol>' +
+      '</div>';
+  }
+
+  global.mermaid = {
+    initialize: function () {},
+    run: function (options) {
+      (options.nodes || []).forEach(function (node) {
+        render(node, node.textContent || '');
+      });
+      return Promise.resolve();
+    }
+  };
+})(window);
 """;
     }
 }

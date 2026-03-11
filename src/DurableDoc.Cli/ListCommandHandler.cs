@@ -19,27 +19,34 @@ public static class ListCommandHandler
         {
             var config = DurableDocConfigLoader.Load(configPath);
             var analyzer = new WorkflowAnalyzer();
-            var diagrams = await analyzer.AnalyzeAsync(inputPath, config, cancellationToken).ConfigureAwait(false);
-            var selected = Filter(diagrams, orchestratorName);
+            var analysis = await analyzer.AnalyzeWorkspaceAsync(inputPath, config, cancellationToken).ConfigureAwait(false);
 
-            if (selected.Length == 0)
+            if (analysis.Diagrams.Count == 0)
             {
-                context.Fail("No orchestrators matched the requested input.");
+                context.Fail(GenerateCommandHandler.BuildNoDiscoveryMessage(analysis, inputPath));
                 return 1;
             }
 
-            foreach (var diagnostic in CliDiagnostics.Evaluate(selected).Where(d => d.Severity == CliDiagnosticSeverity.Warning))
+            var selected = Filter(analysis.Diagrams, orchestratorName);
+
+            if (selected.Length == 0)
+            {
+                context.Fail(GenerateCommandHandler.BuildFilterMismatchMessage(orchestratorName, analysis.Diagrams));
+                return 1;
+            }
+
+            foreach (var diagnostic in CliDiagnostics.Evaluate(selected, config).Where(d => d.Severity == CliDiagnosticSeverity.Warning))
             {
                 context.Warn(FormatDiagnostic(diagnostic));
             }
 
             foreach (var diagram in selected)
             {
-                var activityCount = Count(diagram, WorkflowNodeType.Activity, WorkflowNodeType.RetryActivity);
-                var subOrchestratorCount = Count(diagram, WorkflowNodeType.SubOrchestrator);
-                var externalEventCount = Count(diagram, WorkflowNodeType.ExternalEvent);
+                var activities = GetLabels(diagram, WorkflowNodeType.Activity, WorkflowNodeType.RetryActivity);
+                var subOrchestrators = GetLabels(diagram, WorkflowNodeType.SubOrchestrator, WorkflowNodeType.RetrySubOrchestrator);
+                var externalEvents = GetLabels(diagram, WorkflowNodeType.ExternalEvent);
 
-                context.Info($"{diagram.OrchestratorName} | {diagram.SourceFile ?? "(unknown source)"} | activities={activityCount} | subOrchestrators={subOrchestratorCount} | externalEvents={externalEventCount}");
+                context.Info($"{diagram.OrchestratorName} | {diagram.SourceFile ?? "(unknown source)"} | activities={FormatList(activities)} | subOrchestrators={FormatList(subOrchestrators)} | externalEvents={FormatList(externalEvents)}");
 
                 if (context.Verbosity == CliVerbosity.Detailed)
                 {
@@ -69,9 +76,19 @@ public static class ListCommandHandler
             .ToArray();
     }
 
-    private static int Count(WorkflowDiagram diagram, params WorkflowNodeType[] nodeTypes)
+    private static string[] GetLabels(WorkflowDiagram diagram, params WorkflowNodeType[] nodeTypes)
     {
-        return diagram.Nodes.Count(node => nodeTypes.Contains(node.NodeType));
+        return diagram.Nodes
+            .Where(node => nodeTypes.Contains(node.NodeType))
+            .Select(node => string.IsNullOrWhiteSpace(node.DisplayLabel) ? node.Name : node.DisplayLabel)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(label => label, StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static string FormatList(string[] values)
+    {
+        return values.Length == 0 ? "(none)" : string.Join(", ", values);
     }
 
     private static string FormatDiagnostic(CliDiagnostic diagnostic)

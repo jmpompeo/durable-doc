@@ -70,6 +70,7 @@ public static class MermaidRenderer
             {
                 WorkflowNodeType.OrchestratorStart => $"([\"{label}\"])",
                 WorkflowNodeType.RetryActivity => $"{{{{\"{label}\"}}}}",
+                WorkflowNodeType.RetrySubOrchestrator => $"{{{{\"{label}\"}}}}",
                 WorkflowNodeType.ExternalEvent => $"[[\"{label}\"]]",
                 WorkflowNodeType.Timer => $"[/\"{label}\"/]",
                 WorkflowNodeType.ParallelGroup => $"((\"{label}\"))",
@@ -216,7 +217,9 @@ public static class MermaidRenderer
 
         private static bool ShouldIncludeInBusinessView(WorkflowNode node)
         {
-            return !node.HideInBusiness && node.NodeType != WorkflowNodeType.RetryActivity;
+            return !node.HideInBusiness &&
+                node.NodeType != WorkflowNodeType.RetryActivity &&
+                node.NodeType != WorkflowNodeType.RetrySubOrchestrator;
         }
 
         private static string GetBusinessNodeId(WorkflowNode node)

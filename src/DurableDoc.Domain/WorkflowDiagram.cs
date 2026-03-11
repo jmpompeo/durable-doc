@@ -5,9 +5,11 @@ public sealed class WorkflowDiagram
     public string Id { get; init; } = string.Empty;
     public string OrchestratorName { get; init; } = string.Empty;
     public string? SourceFile { get; init; }
+    public string? SourceProjectPath { get; init; }
     public DateTimeOffset CreatedTimestamp { get; init; } = DateTimeOffset.UtcNow;
     public IReadOnlyList<WorkflowNode> Nodes { get; init; } = [];
     public IReadOnlyList<WorkflowEdge> Edges { get; init; } = [];
+    public IReadOnlyList<WorkflowIssue> Diagnostics { get; init; } = [];
 
     public WorkflowDiagram ToDeterministic()
     {
@@ -28,9 +30,16 @@ public sealed class WorkflowDiagram
             Id = Id,
             OrchestratorName = OrchestratorName,
             SourceFile = SourceFile,
+            SourceProjectPath = SourceProjectPath,
             CreatedTimestamp = CreatedTimestamp,
             Nodes = orderedNodes,
             Edges = orderedEdges,
+            Diagnostics = Diagnostics
+                .OrderBy(issue => issue.Severity)
+                .ThenBy(issue => issue.Code, StringComparer.Ordinal)
+                .ThenBy(issue => issue.LineNumber)
+                .ThenBy(issue => issue.Message, StringComparer.Ordinal)
+                .ToArray(),
         };
     }
 }
@@ -44,6 +53,9 @@ public sealed class WorkflowNode
     public string? BusinessName { get; init; }
     public string? BusinessGroup { get; init; }
     public bool HideInBusiness { get; init; }
+    public string? Notes { get; init; }
+    public string? TechnicalNameOverride { get; init; }
+    public string? RetryHint { get; init; }
     public string? SourceFile { get; init; }
     public int LineNumber { get; init; }
 }
@@ -61,6 +73,7 @@ public enum WorkflowNodeType
     Activity,
     SubOrchestrator,
     RetryActivity,
+    RetrySubOrchestrator,
     Decision,
     ParallelGroup,
     ExternalEvent,
@@ -68,4 +81,23 @@ public enum WorkflowNodeType
     FanOut,
     FanIn,
     Wrapper,
+}
+
+public sealed class WorkflowIssue
+{
+    public WorkflowIssueSeverity Severity { get; init; }
+
+    public string Code { get; init; } = string.Empty;
+
+    public string Message { get; init; } = string.Empty;
+
+    public string? SourceFile { get; init; }
+
+    public int LineNumber { get; init; }
+}
+
+public enum WorkflowIssueSeverity
+{
+    Warning,
+    Error,
 }
