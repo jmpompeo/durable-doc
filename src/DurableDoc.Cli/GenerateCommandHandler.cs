@@ -13,23 +13,39 @@ public static class GenerateCommandHandler
         string? orchestratorName,
         string mode,
         string? configPath,
+        bool strict = false,
+        CliCommandContext? context = null,
         CancellationToken cancellationToken = default)
     {
+        context ??= CliCommandContext.CreateDefault();
+
         try
         {
             var renderMode = ParseMode(mode);
             var config = DurableDocConfigLoader.Load(configPath);
             var analyzer = new WorkflowAnalyzer();
             var diagrams = await analyzer.AnalyzeAsync(inputPath, config, cancellationToken).ConfigureAwait(false);
-
             var selectedDiagrams = diagrams
                 .Where(diagram => string.IsNullOrWhiteSpace(orchestratorName) ||
                     string.Equals(diagram.OrchestratorName, orchestratorName, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(diagram => diagram.OrchestratorName, StringComparer.Ordinal)
                 .ToArray();
 
             if (selectedDiagrams.Length == 0)
             {
-                Console.Error.WriteLine("No orchestrators matched the requested input.");
+                context.Fail("No orchestrators matched the requested input.");
+                return 1;
+            }
+
+            var diagnostics = CliDiagnostics.Evaluate(selectedDiagrams);
+            foreach (var warning in diagnostics.Where(d => d.Severity == CliDiagnosticSeverity.Warning))
+            {
+                context.Warn(FormatDiagnostic(warning));
+            }
+
+            if (strict && diagnostics.Any(d => d.Severity == CliDiagnosticSeverity.Warning))
+            {
+                context.Fail("Generation completed with warnings and '--strict' was specified.");
                 return 1;
             }
 
@@ -45,13 +61,13 @@ public static class GenerateCommandHandler
 
             var result = DashboardGenerator.WriteArtifactsAndBuild(outputDirectory, artifacts);
 
-            Console.WriteLine($"Generated {result.DiagramCount} diagram(s) in {Path.GetFullPath(outputDirectory)}.");
-            Console.WriteLine($"Dashboard ready at {result.DashboardPath}");
+            context.Info($"Generated {result.DiagramCount} diagram(s) in {Path.GetFullPath(outputDirectory)}.");
+            context.Info($"Dashboard ready at {result.DashboardPath}");
             return 0;
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine(ex.Message);
+            context.Fail(ex.Message);
             return 1;
         }
     }
@@ -64,5 +80,12 @@ public static class GenerateCommandHandler
         }
 
         throw new ArgumentException($"Unsupported diagram mode '{mode}'. Use 'developer' or 'business'.", nameof(mode));
+    }
+
+    private static string FormatDiagnostic(CliDiagnostic diagnostic)
+    {
+        return diagnostic.OrchestratorName is null
+            ? diagnostic.Message
+            : $"{diagnostic.OrchestratorName}: {diagnostic.Message}";
     }
 }
