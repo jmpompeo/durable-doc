@@ -2,4 +2,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\DurableDoc.Domain\DurableDoc.Domain.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="Snapshots/**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
