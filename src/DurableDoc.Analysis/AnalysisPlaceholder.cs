@@ -16,13 +16,13 @@ public sealed class WorkflowAnalyzer
         "TaskOrchestrationContext",
     ];
 
-    private static readonly HashSet<string> DurableMethodToNodeType = new(StringComparer.Ordinal)
+    private static readonly Dictionary<string, WorkflowNodeType> DurableMethodToNodeType = new(StringComparer.Ordinal)
     {
-        ["CallActivityAsync"] = nameof(WorkflowNodeType.Activity),
-        ["CallSubOrchestratorAsync"] = nameof(WorkflowNodeType.SubOrchestrator),
-        ["CallActivityWithRetryAsync"] = nameof(WorkflowNodeType.RetryActivity),
-        ["WaitForExternalEvent"] = nameof(WorkflowNodeType.ExternalEvent),
-        ["CreateTimer"] = nameof(WorkflowNodeType.Timer),
+        ["CallActivityAsync"] = WorkflowNodeType.Activity,
+        ["CallSubOrchestratorAsync"] = WorkflowNodeType.SubOrchestrator,
+        ["CallActivityWithRetryAsync"] = WorkflowNodeType.RetryActivity,
+        ["WaitForExternalEvent"] = WorkflowNodeType.ExternalEvent,
+        ["CreateTimer"] = WorkflowNodeType.Timer,
     };
 
     public async Task<IReadOnlyList<WorkflowDiagram>> AnalyzeAsync(string inputPath, DurableDocConfig? config = null, CancellationToken cancellationToken = default)
@@ -88,6 +88,7 @@ public sealed class WorkflowAnalyzer
         var startNode = new WorkflowNode
         {
             Id = "n0",
+            DisplayLabel = method.Identifier.ValueText,
             NodeType = WorkflowNodeType.OrchestratorStart,
             Name = method.Identifier.ValueText,
             SourceFile = span.Path,
@@ -111,6 +112,7 @@ public sealed class WorkflowAnalyzer
             var node = new WorkflowNode
             {
                 Id = $"n{nodeIndex}",
+                DisplayLabel = ExtractStepName(invocation, methodName),
                 NodeType = nodeType.Value,
                 Name = ExtractStepName(invocation, methodName),
                 SourceFile = invocationSpan.Path,
@@ -133,8 +135,6 @@ public sealed class WorkflowAnalyzer
             Id = $"{method.Identifier.ValueText}:{span.StartLinePosition.Line + 1}",
             OrchestratorName = method.Identifier.ValueText,
             SourceFile = span.Path,
-            StartLine = span.StartLinePosition.Line + 1,
-            EndLine = span.EndLinePosition.Line + 1,
             Nodes = nodes,
             Edges = edges,
         };
@@ -152,7 +152,7 @@ public sealed class WorkflowAnalyzer
 
     private static WorkflowNodeType? ResolveNodeType(string methodName, Dictionary<string, WorkflowNodeType> wrapperMap)
     {
-        if (DurableMethodToNodeType.TryGetValue(methodName, out var nodeTypeName) && Enum.TryParse<WorkflowNodeType>(nodeTypeName, out var parsed))
+        if (DurableMethodToNodeType.TryGetValue(methodName, out var parsed))
         {
             return parsed;
         }
