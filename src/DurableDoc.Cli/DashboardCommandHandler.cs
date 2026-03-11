@@ -4,19 +4,23 @@ namespace DurableDoc.Cli;
 
 public static class DashboardCommandHandler
 {
-    public static Task<int> ExecuteAsync(string inputDirectory, CancellationToken cancellationToken = default)
+    public static Task<int> ExecuteAsync(
+        string inputDirectory,
+        CliCommandContext? context = null,
+        CancellationToken cancellationToken = default)
     {
+        context ??= CliCommandContext.CreateDefault();
         cancellationToken.ThrowIfCancellationRequested();
 
         try
         {
             var result = DashboardGenerator.BuildFromArtifacts(inputDirectory);
-            Console.WriteLine($"Dashboard ready at {result.DashboardPath}");
+            context.Info($"Dashboard ready at {result.DashboardPath}");
             return Task.FromResult(0);
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine(ex.Message);
+            context.Fail(ex.Message);
             return Task.FromResult(1);
         }
     }

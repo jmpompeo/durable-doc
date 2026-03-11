@@ -1,5 +1,3 @@
-using Xunit;
-
 namespace DurableDoc.Cli.Tests;
 
 public class SmokeTests
@@ -116,6 +114,114 @@ public class Demo
         Assert.Contains("Filter by orchestrator", dashboard);
         Assert.Contains("Run", dashboard);
         Assert.Contains("mermaid.min.js", dashboard);
+    }
+
+    [Fact]
+    public async Task List_writes_deterministic_orchestrator_summary()
+    {
+        using var fixture = new CliFixture(
+            """
+using System.Threading.Tasks;
+
+public class Demo
+{
+    [OrchestrationTrigger]
+    public async Task Beta(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallSubOrchestratorAsync("Child");
+    }
+
+    [OrchestrationTrigger]
+    public async Task Alpha(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ValidateOrder");
+        await ctx.WaitForExternalEvent<string>("Approved");
+    }
+}
+""");
+
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var context = new DurableDoc.Cli.CliCommandContext(output, error, DurableDoc.Cli.CliVerbosity.Normal, ci: false);
+
+        var exitCode = await DurableDoc.Cli.ListCommandHandler.ExecuteAsync(
+            fixture.SourceDirectory,
+            orchestratorName: null,
+            configPath: null,
+            context: context);
+
+        Assert.Equal(0, exitCode);
+        var lines = output.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(2, lines.Length);
+        Assert.StartsWith("Alpha | ", lines[0], StringComparison.Ordinal);
+        Assert.StartsWith("Beta | ", lines[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Validate_strict_fails_when_warnings_are_present()
+    {
+        using var fixture = new CliFixture(
+            """
+using System.Threading.Tasks;
+
+public class Demo
+{
+    [OrchestrationTrigger]
+    public Task Run(TaskOrchestrationContext ctx)
+    {
+        return Task.CompletedTask;
+    }
+}
+""");
+
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var context = new DurableDoc.Cli.CliCommandContext(output, error, DurableDoc.Cli.CliVerbosity.Normal, ci: true);
+
+        var exitCode = await DurableDoc.Cli.ValidateCommandHandler.ExecuteAsync(
+            fixture.SourceDirectory,
+            configPath: null,
+            strict: true,
+            context: context);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("warning:Run:", error.ToString(), StringComparison.Ordinal);
+        Assert.Contains("error:Validation completed with warnings", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Generate_quiet_suppresses_non_error_output()
+    {
+        using var fixture = new CliFixture(
+            """
+using System.Threading.Tasks;
+
+public class Demo
+{
+    [OrchestrationTrigger]
+    public async Task Run(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ValidateOrder");
+    }
+}
+""");
+
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var context = new DurableDoc.Cli.CliCommandContext(output, error, DurableDoc.Cli.CliVerbosity.Quiet, ci: false);
+
+        var exitCode = await DurableDoc.Cli.GenerateCommandHandler.ExecuteAsync(
+            fixture.SourceDirectory,
+            fixture.OutputDirectory,
+            orchestratorName: null,
+            mode: "developer",
+            configPath: null,
+            strict: false,
+            context: context);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(string.Empty, output.ToString());
+        Assert.Equal(string.Empty, error.ToString());
     }
 
     private sealed class CliFixture : IDisposable
