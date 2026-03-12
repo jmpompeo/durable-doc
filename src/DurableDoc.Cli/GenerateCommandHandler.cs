@@ -68,20 +68,27 @@ public static class GenerateCommandHandler
             }
 
             var generatedAt = DateTimeOffset.UtcNow;
-            var artifacts = selectedDiagrams.Select(diagram => new GeneratedDiagramArtifact
+            var artifacts = selectedDiagrams.Select(diagram =>
             {
-                DiagramId = diagram.Id,
-                OrchestratorName = diagram.OrchestratorName,
-                Mode = renderMode.ToString().ToLowerInvariant(),
-                GeneratedAt = generatedAt,
-                Mermaid = MermaidRenderer.Render(diagram, renderMode),
-                SourceFile = diagram.SourceFile,
-                SourceProjectPath = diagram.SourceProjectPath,
-                Warnings = diagram.Diagnostics
-                    .Where(issue => issue.Severity == DurableDoc.Domain.WorkflowIssueSeverity.Warning)
-                    .Select(issue => issue.Message)
-                    .Distinct(StringComparer.Ordinal)
-                    .ToArray(),
+                var renderedDiagram = MermaidRenderer.Prepare(diagram, renderMode).ToDeterministic();
+                return new GeneratedDiagramArtifact
+                {
+                    DiagramId = renderedDiagram.Id,
+                    OrchestratorName = renderedDiagram.OrchestratorName,
+                    Mode = renderMode.ToString().ToLowerInvariant(),
+                    GeneratedAt = generatedAt,
+                    Mermaid = MermaidRenderer.Render(renderedDiagram),
+                    SourceFile = renderedDiagram.SourceFile,
+                    SourceProjectPath = renderedDiagram.SourceProjectPath,
+                    Warnings = renderedDiagram.Diagnostics
+                        .Where(issue => issue.Severity == DurableDoc.Domain.WorkflowIssueSeverity.Warning)
+                        .Select(issue => issue.Message)
+                        .Distinct(StringComparer.Ordinal)
+                        .ToArray(),
+                    Nodes = renderedDiagram.Nodes,
+                    Edges = renderedDiagram.Edges,
+                    Diagnostics = renderedDiagram.Diagnostics,
+                };
             });
 
             var result = DashboardGenerator.WriteArtifactsAndBuild(resolvedOutputDirectory, artifacts);
@@ -94,6 +101,8 @@ public static class GenerateCommandHandler
                 await DashboardPreviewHost.PreviewAsync(
                     resolvedOutputDirectory,
                     context,
+                    selectedDiagrams.Length == 1 ? selectedDiagrams[0].OrchestratorName : orchestratorName,
+                    renderMode.ToString().ToLowerInvariant(),
                     browserLauncher,
                     cancellationToken).ConfigureAwait(false);
             }
