@@ -158,6 +158,208 @@ public class Demo
     }
 
     [Fact]
+    public async Task Generate_open_serves_dashboard_until_cancellation()
+    {
+        using var fixture = new CliFixture(
+            """
+using System.Threading.Tasks;
+
+public class Demo
+{
+    [OrchestrationTrigger]
+    public async Task First(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ValidateOrder");
+    }
+}
+""");
+
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var context = new DurableDoc.Cli.CliCommandContext(output, error, DurableDoc.Cli.CliVerbosity.Normal, ci: false);
+        using var cancellation = new CancellationTokenSource();
+        Uri? launchedUri = null;
+
+        var commandTask = DurableDoc.Cli.GenerateCommandHandler.ExecuteAsync(
+            fixture.SourceDirectory,
+            fixture.OutputDirectory,
+            orchestratorName: null,
+            mode: "developer",
+            configPath: null,
+            strict: false,
+            context: context,
+            openDashboard: true,
+            browserLauncher: (uri, _) =>
+            {
+                launchedUri = uri;
+                return Task.CompletedTask;
+            },
+            cancellationToken: cancellation.Token);
+
+        var previewUri = await WaitForPreviewUriAsync(output, commandTask);
+
+        Assert.Equal(previewUri, launchedUri);
+
+        using var client = new HttpClient();
+        var dashboard = await client.GetStringAsync(previewUri);
+        var bundle = await client.GetStringAsync(new Uri(previewUri, "mermaid.min.js"));
+
+        Assert.Contains("First", dashboard);
+        Assert.Contains("flowchart TD", dashboard);
+        Assert.Contains(@"source.split(/\r?\n/)", bundle, StringComparison.Ordinal);
+        Assert.Contains("Press Ctrl+C to stop.", output.ToString(), StringComparison.Ordinal);
+
+        cancellation.Cancel();
+
+        var exitCode = await commandTask;
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(string.Empty, error.ToString());
+    }
+
+    [Fact]
+    public async Task Dashboard_open_rebuilds_and_serves_dashboard_until_cancellation()
+    {
+        using var fixture = new CliFixture(
+            """
+using System.Threading.Tasks;
+
+public class Demo
+{
+    [OrchestrationTrigger]
+    public async Task Run(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ValidateOrder");
+        await ctx.WaitForExternalEvent<string>("Approved");
+    }
+}
+""");
+
+        var generateExitCode = await DurableDoc.Cli.GenerateCommandHandler.ExecuteAsync(
+            fixture.SourceDirectory,
+            fixture.OutputDirectory,
+            orchestratorName: null,
+            mode: "developer",
+            configPath: null);
+
+        Assert.Equal(0, generateExitCode);
+
+        File.Delete(Path.Combine(fixture.OutputDirectory, "index.html"));
+
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var context = new DurableDoc.Cli.CliCommandContext(output, error, DurableDoc.Cli.CliVerbosity.Normal, ci: false);
+        using var cancellation = new CancellationTokenSource();
+
+        var commandTask = DurableDoc.Cli.DashboardCommandHandler.ExecuteAsync(
+            fixture.OutputDirectory,
+            context: context,
+            openDashboard: true,
+            browserLauncher: (_, _) => Task.CompletedTask,
+            cancellationToken: cancellation.Token);
+
+        var previewUri = await WaitForPreviewUriAsync(output, commandTask);
+
+        using var client = new HttpClient();
+        var dashboard = await client.GetStringAsync(previewUri);
+        var bundleResponse = await client.GetAsync(new Uri(previewUri, "mermaid.min.js"));
+
+        Assert.Contains("Run", dashboard);
+        Assert.True(bundleResponse.IsSuccessStatusCode);
+
+        cancellation.Cancel();
+
+        var exitCode = await commandTask;
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(string.Empty, error.ToString());
+    }
+
+    [Fact]
+    public async Task Generate_open_is_rejected_in_ci_mode()
+    {
+        using var fixture = new CliFixture(
+            """
+using System.Threading.Tasks;
+
+public class Demo
+{
+    [OrchestrationTrigger]
+    public async Task Run(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ValidateOrder");
+    }
+}
+""");
+
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var context = new DurableDoc.Cli.CliCommandContext(output, error, DurableDoc.Cli.CliVerbosity.Normal, ci: true);
+
+        var exitCode = await DurableDoc.Cli.GenerateCommandHandler.ExecuteAsync(
+            fixture.SourceDirectory,
+            fixture.OutputDirectory,
+            orchestratorName: null,
+            mode: "developer",
+            configPath: null,
+            strict: false,
+            context: context,
+            openDashboard: true);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("The '--open' option is not supported with '--ci'", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Generate_open_warns_when_browser_launch_fails_but_preview_still_serves()
+    {
+        using var fixture = new CliFixture(
+            """
+using System.Threading.Tasks;
+
+public class Demo
+{
+    [OrchestrationTrigger]
+    public async Task Run(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ValidateOrder");
+    }
+}
+""");
+
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var context = new DurableDoc.Cli.CliCommandContext(output, error, DurableDoc.Cli.CliVerbosity.Normal, ci: false);
+        using var cancellation = new CancellationTokenSource();
+
+        var commandTask = DurableDoc.Cli.GenerateCommandHandler.ExecuteAsync(
+            fixture.SourceDirectory,
+            fixture.OutputDirectory,
+            orchestratorName: null,
+            mode: "developer",
+            configPath: null,
+            strict: false,
+            context: context,
+            openDashboard: true,
+            browserLauncher: (_, _) => throw new InvalidOperationException("boom"),
+            cancellationToken: cancellation.Token);
+
+        var previewUri = await WaitForPreviewUriAsync(output, commandTask);
+
+        using var client = new HttpClient();
+        var dashboard = await client.GetStringAsync(previewUri);
+
+        Assert.Contains("Run", dashboard);
+        Assert.Contains("Could not open browser automatically: boom", error.ToString(), StringComparison.Ordinal);
+
+        cancellation.Cancel();
+
+        var exitCode = await commandTask;
+
+        Assert.Equal(0, exitCode);
+    }
+
+    [Fact]
     public async Task List_writes_deterministic_orchestrator_summary()
     {
         using var fixture = new CliFixture(
@@ -530,5 +732,44 @@ public class Demo
         }
 
         throw new DirectoryNotFoundException("Could not locate the durable-doc solution root.");
+    }
+
+    private static async Task<Uri> WaitForPreviewUriAsync(StringWriter output, Task<int> commandTask)
+    {
+        var timeout = DateTime.UtcNow.AddSeconds(5);
+
+        while (DateTime.UtcNow < timeout)
+        {
+            var previewUri = ExtractPreviewUri(output.ToString());
+            if (previewUri is not null)
+            {
+                return previewUri;
+            }
+
+            if (commandTask.IsCompleted)
+            {
+                break;
+            }
+
+            await Task.Delay(50);
+        }
+
+        throw new TimeoutException($"The dashboard preview URL was not written. Output was:{Environment.NewLine}{output}");
+    }
+
+    private static Uri? ExtractPreviewUri(string output)
+    {
+        const string prefix = "Dashboard preview at ";
+
+        foreach (var line in output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (line.StartsWith(prefix, StringComparison.Ordinal) &&
+                Uri.TryCreate(line[prefix.Length..], UriKind.Absolute, out var uri))
+            {
+                return uri;
+            }
+        }
+
+        return null;
     }
 }

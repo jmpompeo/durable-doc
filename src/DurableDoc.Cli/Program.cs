@@ -36,6 +36,7 @@ static Command CreateGenerateCommand(
     var outputOption = new Option<DirectoryInfo?>(
         "--output",
         "Directory for generated diagrams and dashboard");
+    var openOption = new Option<bool>("--open", "Serve the generated dashboard on localhost and open it in the default browser");
 
     var command = new Command("generate", "Generate Mermaid diagrams and build the static dashboard");
     command.AddOption(inputOption);
@@ -43,6 +44,7 @@ static Command CreateGenerateCommand(
     command.AddOption(modeOption);
     command.AddOption(formatOption);
     command.AddOption(outputOption);
+    command.AddOption(openOption);
     command.SetHandler(async (InvocationContext invocationContext) =>
     {
         var input = invocationContext.ParseResult.GetValueForOption(inputOption)!;
@@ -50,6 +52,7 @@ static Command CreateGenerateCommand(
         var mode = invocationContext.ParseResult.GetValueForOption(modeOption)!;
         var format = invocationContext.ParseResult.GetValueForOption(formatOption);
         var output = invocationContext.ParseResult.GetValueForOption(outputOption);
+        var open = invocationContext.ParseResult.GetValueForOption(openOption);
         var configFile = invocationContext.ParseResult.GetValueForOption(configOption);
         var verbosity = invocationContext.ParseResult.GetValueForOption(verbosityOption)!;
         var ci = invocationContext.ParseResult.GetValueForOption(ciOption);
@@ -63,7 +66,8 @@ static Command CreateGenerateCommand(
             format,
             configFile?.FullName,
             strict,
-            context);
+            context,
+            open);
     });
 
     return command;
@@ -131,14 +135,20 @@ static Command CreateDashboardCommand(Option<string> verbosityOption, Option<boo
     {
         IsRequired = true,
     };
+    var openOption = new Option<bool>("--open", "Serve the dashboard on localhost and open it in the default browser");
 
     var command = new Command("dashboard", "Build the static dashboard from generated diagram artifacts");
     command.AddOption(inputOption);
-    command.SetHandler(async (string input, string verbosity, bool ci) =>
+    command.AddOption(openOption);
+    command.SetHandler(async (InvocationContext invocationContext) =>
     {
+        var input = invocationContext.ParseResult.GetValueForOption(inputOption)!;
+        var open = invocationContext.ParseResult.GetValueForOption(openOption);
+        var verbosity = invocationContext.ParseResult.GetValueForOption(verbosityOption)!;
+        var ci = invocationContext.ParseResult.GetValueForOption(ciOption);
         var context = CreateContext(verbosity, ci);
-        Environment.ExitCode = await DurableDoc.Cli.DashboardCommandHandler.ExecuteAsync(input, context);
-    }, inputOption, verbosityOption, ciOption);
+        Environment.ExitCode = await DurableDoc.Cli.DashboardCommandHandler.ExecuteAsync(input, context, open);
+    });
 
     return command;
 }

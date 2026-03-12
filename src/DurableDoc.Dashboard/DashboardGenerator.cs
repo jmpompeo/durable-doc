@@ -490,7 +490,7 @@ internal static class DashboardHtmlTemplate
         </div>
         <div id="mode-switcher" class="mode-switcher"></div>
       </div>
-      <p class="hint">The dashboard is fully static and local. Open this file after running <code>durable-doc generate</code> or <code>durable-doc dashboard</code>.</p>
+      <p class="hint">The dashboard is fully local. Open this file directly, or run <code>durable-doc generate --open</code> or <code>durable-doc dashboard --open</code> for a localhost preview.</p>
       <div id="details" class="details-grid"></div>
       <ul id="warnings" class="warnings"></ul>
       <div id="diagram"></div>

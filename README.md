@@ -9,6 +9,7 @@
 - Diagram modes: `developer` and `business`
 - Renderer: Mermaid output
 - Dashboard: static offline HTML with local JS assets
+- Optional local preview: `--open` serves the dashboard on `localhost` and opens it in your browser
 - Config: `durable-doc.json` for defaults, wrapper rules, include/exclude filters, and business-view overrides
 
 ## CLI examples
@@ -18,6 +19,7 @@ durable-doc list --input ./durable-doc.sln
 durable-doc validate --input ./samples/DurableDoc.Sample.Advanced/DurableDoc.Sample.Advanced.csproj --strict
 durable-doc generate --input ./samples/DurableDoc.Sample.Advanced/DurableDoc.Sample.Advanced.csproj --orchestrator RunCustomerOnboarding --mode developer --format mermaid --output ./docs/diagrams
 durable-doc dashboard --input ./docs/diagrams
+durable-doc generate --input ./samples/DurableDoc.Sample.Advanced/DurableDoc.Sample.Advanced.csproj --output ./docs/diagrams --open
 ```
 
 ## Config example
