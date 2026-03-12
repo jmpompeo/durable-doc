@@ -27,11 +27,13 @@ public static class ListCommandHandler
                 return 1;
             }
 
-            var selected = Filter(analysis.Diagrams, orchestratorName);
+            var selected = WorkflowSelection.FilterDiagrams(analysis.Diagrams, orchestratorName);
 
             if (selected.Length == 0)
             {
-                context.Fail(GenerateCommandHandler.BuildFilterMismatchMessage(orchestratorName, analysis.Diagrams));
+                context.Fail(WorkflowSelection.BuildFilterMismatchMessage(
+                    orchestratorName,
+                    analysis.Diagrams.Select(diagram => diagram.OrchestratorName)));
                 return 1;
             }
 
@@ -65,15 +67,6 @@ public static class ListCommandHandler
             context.Fail(ex.Message);
             return 1;
         }
-    }
-
-    private static WorkflowDiagram[] Filter(IReadOnlyList<WorkflowDiagram> diagrams, string? orchestratorName)
-    {
-        return diagrams
-            .Where(diagram => string.IsNullOrWhiteSpace(orchestratorName) ||
-                string.Equals(diagram.OrchestratorName, orchestratorName, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(diagram => diagram.OrchestratorName, StringComparer.Ordinal)
-            .ToArray();
     }
 
     private static string[] GetLabels(WorkflowDiagram diagram, params WorkflowNodeType[] nodeTypes)

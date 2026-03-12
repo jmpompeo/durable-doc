@@ -28,15 +28,13 @@ public static class ValidateCommandHandler
                 return 1;
             }
 
-            var diagrams = analysis.Diagrams
-                .Where(diagram => string.IsNullOrWhiteSpace(orchestratorName) ||
-                    string.Equals(diagram.OrchestratorName, orchestratorName, StringComparison.OrdinalIgnoreCase))
-                .OrderBy(diagram => diagram.OrchestratorName, StringComparer.Ordinal)
-                .ToArray();
+            var diagrams = WorkflowSelection.FilterDiagrams(analysis.Diagrams, orchestratorName);
 
             if (diagrams.Length == 0)
             {
-                context.Fail(GenerateCommandHandler.BuildFilterMismatchMessage(orchestratorName, analysis.Diagrams));
+                context.Fail(WorkflowSelection.BuildFilterMismatchMessage(
+                    orchestratorName,
+                    analysis.Diagrams.Select(diagram => diagram.OrchestratorName)));
                 return 1;
             }
 
