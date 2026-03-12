@@ -33,10 +33,15 @@ public class Demo
         Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "dashboard.css")));
         Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "dashboard.js")));
         Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "dashboard-data.json")));
+        Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "dashboard.css")));
+        Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "dashboard.js")));
+        Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "dashboard-data.json")));
 
         var mermaid = File.ReadAllText(Directory.EnumerateFiles(fixture.OutputDirectory, "*.mmd").Single());
         var dashboard = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "index.html"));
         var bundle = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "mermaid.min.js"));
+        var artifact = File.ReadAllText(Directory.EnumerateFiles(fixture.OutputDirectory, "*.diagram.json").Single());
+        var dashboardData = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "dashboard-data.json"));
         var artifact = File.ReadAllText(Directory.EnumerateFiles(fixture.OutputDirectory, "*.diagram.json").Single());
         var dashboardData = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "dashboard-data.json"));
 
@@ -46,10 +51,18 @@ public class Demo
         Assert.Contains("dashboard-bootstrap", dashboard, StringComparison.Ordinal);
         Assert.Contains("dashboard.js", dashboard, StringComparison.Ordinal);
         Assert.Contains("dashboard.css", dashboard, StringComparison.Ordinal);
+        Assert.Contains("\"mode\": \"developer\"", dashboard, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("dashboard-bootstrap", dashboard, StringComparison.Ordinal);
+        Assert.Contains("dashboard.js", dashboard, StringComparison.Ordinal);
+        Assert.Contains("dashboard.css", dashboard, StringComparison.Ordinal);
         Assert.DoesNotContain("__PAYLOAD__", dashboard, StringComparison.Ordinal);
         Assert.DoesNotContain("{{payload}}", dashboard, StringComparison.Ordinal);
         Assert.Contains(@"source.split(/\r?\n/)", bundle, StringComparison.Ordinal);
         Assert.DoesNotContain(@"<br\\/>", bundle, StringComparison.Ordinal);
+        Assert.Contains("\"nodes\": [", artifact, StringComparison.Ordinal);
+        Assert.Contains("\"edges\": [", artifact, StringComparison.Ordinal);
+        Assert.Contains("\"nodeType\": \"OrchestratorStart\"", artifact, StringComparison.Ordinal);
+        Assert.Contains("\"nodeType\": \"OrchestratorStart\"", dashboardData, StringComparison.Ordinal);
         Assert.Contains("\"nodes\": [", artifact, StringComparison.Ordinal);
         Assert.Contains("\"edges\": [", artifact, StringComparison.Ordinal);
         Assert.Contains("\"nodeType\": \"OrchestratorStart\"", artifact, StringComparison.Ordinal);
@@ -251,8 +264,11 @@ public class Demo
 
         var dashboard = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "index.html"));
         Assert.Contains("Filter orchestrators", dashboard);
+        Assert.Contains("Filter orchestrators", dashboard);
         Assert.Contains("Run", dashboard);
         Assert.Contains("mermaid.min.js", dashboard);
+        Assert.Contains("dashboard.js", dashboard);
+        Assert.Contains("dashboard.css", dashboard);
         Assert.Contains("dashboard.js", dashboard);
         Assert.Contains("dashboard.css", dashboard);
         Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "mermaid.min.js")));
@@ -458,7 +474,10 @@ public class Demo
 
         Assert.Equal("First", GetQueryValue(previewUri, "orchestrator"));
         Assert.Equal("developer", GetQueryValue(previewUri, "mode"));
+        Assert.Equal("First", GetQueryValue(previewUri, "orchestrator"));
+        Assert.Equal("developer", GetQueryValue(previewUri, "mode"));
         Assert.Contains("First", dashboard);
+        Assert.Contains("\"displayLabel\": \"First\"", dashboard, StringComparison.Ordinal);
         Assert.Contains("\"displayLabel\": \"First\"", dashboard, StringComparison.Ordinal);
         Assert.Contains(@"source.split(/\r?\n/)", bundle, StringComparison.Ordinal);
         Assert.Contains("Press Ctrl+C to stop.", output.ToString(), StringComparison.Ordinal);
@@ -1063,6 +1082,21 @@ public class Demo
                 Uri.TryCreate(line[prefix.Length..], UriKind.Absolute, out var uri))
             {
                 return uri;
+            }
+        }
+
+        return null;
+    }
+
+    private static string? GetQueryValue(Uri uri, string key)
+    {
+        var query = uri.Query.TrimStart('?');
+        foreach (var segment in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = segment.Split('=', 2);
+            if (parts.Length == 2 && string.Equals(parts[0], key, StringComparison.Ordinal))
+            {
+                return Uri.UnescapeDataString(parts[1]);
             }
         }
 
