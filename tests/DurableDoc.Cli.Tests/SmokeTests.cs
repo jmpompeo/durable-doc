@@ -42,9 +42,7 @@ public class Demo
         var bundle = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "mermaid.min.js"));
         var artifact = File.ReadAllText(Directory.EnumerateFiles(fixture.OutputDirectory, "*.diagram.json").Single());
         var dashboardData = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "dashboard-data.json"));
-        var artifact = File.ReadAllText(Directory.EnumerateFiles(fixture.OutputDirectory, "*.diagram.json").Single());
-        var dashboardData = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "dashboard-data.json"));
-
+        
         Assert.Contains("flowchart TD", mermaid);
         Assert.Contains("First", dashboard);
         Assert.Contains("\"mode\": \"developer\"", dashboard, StringComparison.OrdinalIgnoreCase);
@@ -1082,21 +1080,6 @@ public class Demo
                 Uri.TryCreate(line[prefix.Length..], UriKind.Absolute, out var uri))
             {
                 return uri;
-            }
-        }
-
-        return null;
-    }
-
-    private static string? GetQueryValue(Uri uri, string key)
-    {
-        var query = uri.Query.TrimStart('?');
-        foreach (var segment in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
-        {
-            var parts = segment.Split('=', 2);
-            if (parts.Length == 2 && string.Equals(parts[0], key, StringComparison.Ordinal))
-            {
-                return Uri.UnescapeDataString(parts[1]);
             }
         }
 
