@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>durable-doc dashboard</title>
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <p class="eyebrow">durable-doc</p>
+        <h1>Workflow Studio</h1>
+        <p class="lede">Browse generated diagrams by audience, compare views, and inspect source-aware workflow metadata.</p>
+      </div>
+
+      <div class="panel controls">
+        <label class="field">
+          <span>Search orchestrators</span>
+          <input id="orchestrator-filter" type="search" placeholder="CustomerOnboarding">
+        </label>
+
+        <label class="field">
+          <span>Mode availability</span>
+          <select id="mode-filter">
+            <option value="">All orchestrators</option>
+            <option value="developer">Has developer view</option>
+            <option value="business">Has business view</option>
+            <option value="both">Has both views</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="panel results-panel">
+        <div class="section-heading">
+          <h2>Orchestrators</h2>
+          <span id="result-count" class="count"></span>
+        </div>
+        <div id="results" class="results"></div>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <section class="panel stage">
+        <div class="stage-header">
+          <div>
+            <div id="selected-mode" class="badge">No selection</div>
+            <h2 id="selected-title">Select a generated diagram</h2>
+          </div>
+          <div class="stage-actions">
+            <div id="mode-switcher" class="mode-switcher"></div>
+            <button id="compare-toggle" class="compare-toggle" type="button" disabled>Compare views</button>
+          </div>
+        </div>
+
+        <p class="hint">Static files remain shareable, while localhost serving upgrades the local workflow with auto-refresh and quicker navigation.</p>
+        <div id="diagram-grid" class="diagram-grid"></div>
+      </section>
+
+      <aside class="panel inspector">
+        <div class="section-heading">
+          <h2>Inspector</h2>
+          <span id="refresh-indicator" class="refresh-indicator">Static snapshot</span>
+        </div>
+        <div id="details" class="details-grid"></div>
+        <div>
+          <h3>Warnings</h3>
+          <ul id="warnings" class="warnings"></ul>
+        </div>
+        <div>
+          <h3>Mermaid source</h3>
+          <pre id="source" class="source"></pre>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <script id="dashboard-bootstrap" type="application/json">__BOOTSTRAP_DATA__</script>
+  <script src="mermaid.min.js"></script>
+  <script src="dashboard.js"></script>
+</body>
+</html>

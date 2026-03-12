@@ -2,4 +2,7 @@
   <ItemGroup>
     <ProjectReference Include="..\DurableDoc.Domain\DurableDoc.Domain.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\*" />
+  </ItemGroup>
 </Project>

@@ -216,7 +216,11 @@ public static class MermaidRenderer
 
         private static bool ShouldIncludeInBusinessView(WorkflowNode node)
         {
-            return !node.HideInBusiness && node.NodeType != WorkflowNodeType.RetryActivity;
+            return !node.HideInBusiness &&
+                node.NodeType != WorkflowNodeType.RetryActivity &&
+                node.NodeType != WorkflowNodeType.FanOut &&
+                node.NodeType != WorkflowNodeType.FanIn &&
+                node.NodeType != WorkflowNodeType.Wrapper;
         }
 
         private static string GetBusinessNodeId(WorkflowNode node)

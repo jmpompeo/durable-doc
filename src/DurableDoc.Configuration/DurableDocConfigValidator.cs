@@ -18,6 +18,15 @@ public static class DurableDocConfigValidator
             .Where(g => g.Count() > 1)
             .Select(g => g.Key)
             .ToArray();
+        var businessSteps = config.BusinessView?.Steps ?? [];
+        var duplicateBusinessSteps = businessSteps
+            .Where(step => !string.IsNullOrWhiteSpace(step.Orchestrator) && !string.IsNullOrWhiteSpace(step.Step))
+            .GroupBy(
+                step => $"{step.Orchestrator.Trim()}::{step.Step.Trim()}",
+                StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key.Replace("::", " / ", StringComparison.Ordinal))
+            .ToArray();
 
         foreach (var wrapper in wrappers)
         {
@@ -32,9 +41,27 @@ public static class DurableDocConfigValidator
             }
         }
 
+        foreach (var step in businessSteps)
+        {
+            if (string.IsNullOrWhiteSpace(step.Orchestrator))
+            {
+                errors.Add("Business step overlay requires 'orchestrator'.");
+            }
+
+            if (string.IsNullOrWhiteSpace(step.Step))
+            {
+                errors.Add($"Business step overlay for orchestrator '{step.Orchestrator}' requires 'step'.");
+            }
+        }
+
         if (duplicates.Length > 0)
         {
             errors.Add($"Duplicate wrapper method names are not allowed: {string.Join(", ", duplicates)}.");
+        }
+
+        if (duplicateBusinessSteps.Length > 0)
+        {
+            errors.Add($"Duplicate business step overlays are not allowed: {string.Join(", ", duplicateBusinessSteps)}.");
         }
 
         if (errors.Count > 0)

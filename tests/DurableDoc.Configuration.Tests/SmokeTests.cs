@@ -16,6 +16,11 @@ public class SmokeTests
                 "wrappers": [
                   { "methodName": "CallActivityWithResult", "kind": "Activity", "targetNameArgumentIndex": 0 }
                 ]
+              },
+              "businessView": {
+                "steps": [
+                  { "orchestrator": "Run", "step": "ValidateOrder", "label": "Validate order", "group": "Review", "hide": true }
+                ]
               }
             }
             """);
@@ -25,6 +30,8 @@ public class SmokeTests
         Assert.Equal(1, config.Version);
         Assert.Single(config.Analysis!.Wrappers!);
         Assert.Equal("CallActivityWithResult", config.Analysis!.Wrappers![0].MethodName);
+        Assert.Single(config.BusinessView!.Steps!);
+        Assert.Equal("Validate order", config.BusinessView!.Steps![0].Label);
     }
 
     [Fact]
@@ -79,6 +86,28 @@ public class SmokeTests
         var ex = Assert.Throws<ConfigValidationException>(() => DurableDocConfigLoader.Load(configPath, fixture.WorkingDirectory));
 
         Assert.Contains("requires", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Load_ThrowsForDuplicateBusinessStepOverlays()
+    {
+        using var fixture = new ConfigFixture();
+        var configPath = fixture.WriteConfig(
+            """
+            {
+              "version": 1,
+              "businessView": {
+                "steps": [
+                  { "orchestrator": "Run", "step": "ValidateOrder" },
+                  { "orchestrator": "run", "step": "validateorder" }
+                ]
+              }
+            }
+            """);
+
+        var ex = Assert.Throws<ConfigValidationException>(() => DurableDocConfigLoader.Load(configPath, fixture.WorkingDirectory));
+
+        Assert.Contains("Duplicate business step overlays", ex.Message);
     }
 
     [Fact]

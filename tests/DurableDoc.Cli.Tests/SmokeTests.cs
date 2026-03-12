@@ -1,3 +1,6 @@
+using System.Net.Http;
+using System.Text.Json;
+
 namespace DurableDoc.Cli.Tests;
 
 public class SmokeTests
@@ -24,18 +27,23 @@ public class Demo
             fixture.OutputDirectory,
             orchestratorName: null,
             mode: "developer",
-            configPath: null);
+            configPath: null,
+            context: CreateCiContext());
 
         Assert.Equal(0, exitCode);
         Assert.Single(Directory.EnumerateFiles(fixture.OutputDirectory, "*.mmd"));
         Assert.Single(Directory.EnumerateFiles(fixture.OutputDirectory, "*.diagram.json"));
+        Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "dashboard-data.json")));
 
         var mermaid = File.ReadAllText(Directory.EnumerateFiles(fixture.OutputDirectory, "*.mmd").Single());
         var dashboard = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "index.html"));
+        var artifact = File.ReadAllText(Directory.EnumerateFiles(fixture.OutputDirectory, "*.diagram.json").Single());
 
         Assert.Contains("flowchart TD", mermaid);
-        Assert.Contains("First", dashboard);
+        Assert.Contains("Workflow Studio", dashboard);
         Assert.Contains("\"mode\":\"developer\"", dashboard, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"nodes\":", artifact, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"edges\":", artifact, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -66,7 +74,8 @@ public class Demo
             fixture.OutputDirectory,
             orchestratorName: "Second",
             mode: "business",
-            configPath: null);
+            configPath: null,
+            context: CreateCiContext());
 
         Assert.Equal(0, exitCode);
 
@@ -100,20 +109,80 @@ public class Demo
             fixture.OutputDirectory,
             orchestratorName: null,
             mode: "developer",
-            configPath: null);
+            configPath: null,
+            context: CreateCiContext());
 
         Assert.Equal(0, generateExitCode);
 
         File.Delete(Path.Combine(fixture.OutputDirectory, "index.html"));
 
-        var dashboardExitCode = await DurableDoc.Cli.DashboardCommandHandler.ExecuteAsync(fixture.OutputDirectory);
+        var dashboardExitCode = await DurableDoc.Cli.DashboardCommandHandler.ExecuteAsync(
+            fixture.OutputDirectory,
+            context: CreateCiContext());
 
         Assert.Equal(0, dashboardExitCode);
 
         var dashboard = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "index.html"));
-        Assert.Contains("Filter by orchestrator", dashboard);
+        Assert.Contains("Workflow Studio", dashboard);
         Assert.Contains("Run", dashboard);
         Assert.Contains("mermaid.min.js", dashboard);
+    }
+
+    [Fact]
+    public async Task Dashboard_serves_localhost_page_without_opening_browser()
+    {
+        using var fixture = new CliFixture(
+            """
+using System.Threading.Tasks;
+
+public class Demo
+{
+    [OrchestrationTrigger]
+    public async Task Run(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ValidateOrder");
+    }
+}
+""");
+
+        var generateExitCode = await DurableDoc.Cli.GenerateCommandHandler.ExecuteAsync(
+            fixture.SourceDirectory,
+            fixture.OutputDirectory,
+            orchestratorName: null,
+            mode: "developer",
+            configPath: null,
+            context: CreateCiContext());
+
+        Assert.Equal(0, generateExitCode);
+
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var context = new DurableDoc.Cli.CliCommandContext(output, error, DurableDoc.Cli.CliVerbosity.Normal, ci: false);
+
+        try
+        {
+            var dashboardExitCode = await DurableDoc.Cli.DashboardCommandHandler.ExecuteAsync(
+                fixture.OutputDirectory,
+                noOpen: true,
+                context: context);
+
+            Assert.Equal(0, dashboardExitCode);
+
+            var urlLine = output.ToString()
+                .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
+                .Single(line => line.StartsWith("Dashboard available at ", StringComparison.Ordinal));
+            var url = urlLine["Dashboard available at ".Length..];
+
+            using var client = new HttpClient();
+            var html = await client.GetStringAsync(url);
+
+            Assert.Contains("Workflow Studio", html);
+            Assert.Equal(string.Empty, error.ToString());
+        }
+        finally
+        {
+            StopDashboardServer(fixture.OutputDirectory);
+        }
     }
 
     [Fact]
@@ -208,7 +277,7 @@ public class Demo
 
         var output = new StringWriter();
         var error = new StringWriter();
-        var context = new DurableDoc.Cli.CliCommandContext(output, error, DurableDoc.Cli.CliVerbosity.Quiet, ci: false);
+        var context = new DurableDoc.Cli.CliCommandContext(output, error, DurableDoc.Cli.CliVerbosity.Quiet, ci: true);
 
         var exitCode = await DurableDoc.Cli.GenerateCommandHandler.ExecuteAsync(
             fixture.SourceDirectory,
@@ -234,7 +303,8 @@ public class Demo
             outputFixture.OutputDirectory,
             orchestratorName: null,
             mode: "developer",
-            configPath: null);
+            configPath: null,
+            context: CreateCiContext());
 
         Assert.Equal(0, exitCode);
         Assert.Equal(4, Directory.EnumerateFiles(outputFixture.OutputDirectory, "*.mmd").Count());
@@ -360,5 +430,38 @@ public class Demo
         }
 
         throw new DirectoryNotFoundException("Could not locate the durable-doc solution root.");
+    }
+
+    private static DurableDoc.Cli.CliCommandContext CreateCiContext()
+    {
+        return new DurableDoc.Cli.CliCommandContext(new StringWriter(), new StringWriter(), DurableDoc.Cli.CliVerbosity.Normal, ci: true);
+    }
+
+    private static void StopDashboardServer(string outputDirectory)
+    {
+        var statePath = Path.Combine(outputDirectory, ".durable-doc-dashboard.server.json");
+        if (!File.Exists(statePath))
+        {
+            return;
+        }
+
+        var json = File.ReadAllText(statePath);
+        using var document = JsonDocument.Parse(json);
+        if (!document.RootElement.TryGetProperty("ProcessId", out var processIdElement))
+        {
+            processIdElement = document.RootElement.GetProperty("processId");
+        }
+
+        try
+        {
+            var process = System.Diagnostics.Process.GetProcessById(processIdElement.GetInt32());
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch
+        {
+        }
     }
 }

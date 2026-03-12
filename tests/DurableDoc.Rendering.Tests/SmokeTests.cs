@@ -59,17 +59,21 @@ public class SmokeTests
                 new WorkflowNode { Id = "start", NodeType = WorkflowNodeType.OrchestratorStart, Name = "PaymentOrchestrator", BusinessName = "Start payment" },
                 new WorkflowNode { Id = "validate", NodeType = WorkflowNodeType.Activity, Name = "ValidateCustomer", BusinessName = "Validate customer" },
                 new WorkflowNode { Id = "retry", NodeType = WorkflowNodeType.RetryActivity, Name = "Retry ChargePayment" },
+                new WorkflowNode { Id = "fanout", NodeType = WorkflowNodeType.FanOut, Name = "Fan-out" },
                 new WorkflowNode { Id = "charge", NodeType = WorkflowNodeType.Activity, Name = "ChargePayment", BusinessGroup = "Process payment" },
                 new WorkflowNode { Id = "record", NodeType = WorkflowNodeType.Activity, Name = "RecordLedgerEntry", BusinessGroup = "Process payment" },
+                new WorkflowNode { Id = "fanin", NodeType = WorkflowNodeType.FanIn, Name = "Fan-in" },
                 new WorkflowNode { Id = "approval", NodeType = WorkflowNodeType.ExternalEvent, Name = "WaitForApproval", BusinessName = "Await approval" },
             ],
             Edges =
             [
                 new WorkflowEdge { FromNodeId = "start", ToNodeId = "validate" },
                 new WorkflowEdge { FromNodeId = "validate", ToNodeId = "retry" },
-                new WorkflowEdge { FromNodeId = "retry", ToNodeId = "charge" },
+                new WorkflowEdge { FromNodeId = "retry", ToNodeId = "fanout" },
+                new WorkflowEdge { FromNodeId = "fanout", ToNodeId = "charge" },
                 new WorkflowEdge { FromNodeId = "charge", ToNodeId = "record" },
-                new WorkflowEdge { FromNodeId = "record", ToNodeId = "approval" },
+                new WorkflowEdge { FromNodeId = "record", ToNodeId = "fanin" },
+                new WorkflowEdge { FromNodeId = "fanin", ToNodeId = "approval" },
             ],
         };
 
@@ -80,6 +84,8 @@ public class SmokeTests
         Assert.Contains("[[\"Await approval\"]]", mermaid);
         Assert.DoesNotContain("Retry ChargePayment", mermaid);
         Assert.DoesNotContain("ChargePayment", mermaid);
+        Assert.DoesNotContain("Fan-out", mermaid);
+        Assert.DoesNotContain("Fan-in", mermaid);
         Assert.Equal(1, CountOccurrences(mermaid, "Process payment"));
     }
 

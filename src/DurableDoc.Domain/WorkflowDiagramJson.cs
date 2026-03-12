@@ -29,6 +29,8 @@ internal sealed class SerializableWorkflowDiagram
 
     public string? SourceFile { get; init; }
 
+    public string? SourceProjectPath { get; init; }
+
     public DateTimeOffset CreatedTimestamp { get; init; }
 
     public IReadOnlyList<SerializableWorkflowNode> Nodes { get; init; } = [];
@@ -42,6 +44,7 @@ internal sealed class SerializableWorkflowDiagram
             Id = diagram.Id,
             OrchestratorName = diagram.OrchestratorName,
             SourceFile = diagram.SourceFile,
+            SourceProjectPath = diagram.SourceProjectPath,
             CreatedTimestamp = diagram.CreatedTimestamp,
             Nodes = diagram.Nodes.Select(SerializableWorkflowNode.From).ToArray(),
             Edges = diagram.Edges,

@@ -23,6 +23,7 @@ public class SmokeTests
             diagrams.Select(diagram => diagram.OrchestratorName).ToArray());
 
         var mainDiagram = Assert.Single(diagrams, diagram => diagram.OrchestratorName == "RunCustomerOnboarding");
+        Assert.EndsWith("DurableDoc.Sample.Advanced.csproj", mainDiagram.SourceProjectPath, StringComparison.Ordinal);
 
         Assert.Equal(
             [
@@ -89,6 +90,68 @@ public class Demo
     }
 
     [Fact]
+    public async Task AnalyzeAsync_Captures_if_else_as_decision_edges()
+    {
+        using var fixture = new TempSourceFixture("""
+using System.Threading.Tasks;
+
+public class Demo
+{
+    [OrchestrationTrigger]
+    public async Task Run(TaskOrchestrationContext ctx, bool approved)
+    {
+        if (approved)
+        {
+            await ctx.CallActivityAsync("ApproveOrder");
+        }
+        else
+        {
+            await ctx.CallActivityAsync("RejectOrder");
+        }
+    }
+}
+""");
+
+        var analyzer = new WorkflowAnalyzer();
+        var diagram = Assert.Single(await analyzer.AnalyzeAsync(fixture.DirectoryPath));
+
+        Assert.Contains(diagram.Nodes, node => node.NodeType == WorkflowNodeType.Decision && node.DisplayLabel == "approved");
+        Assert.Contains(diagram.Edges, edge => edge.ConditionLabel == "approved");
+        Assert.Contains(diagram.Edges, edge => edge.ConditionLabel == "else");
+        Assert.Contains(diagram.Nodes, node => node.DisplayLabel == "ApproveOrder");
+        Assert.Contains(diagram.Nodes, node => node.DisplayLabel == "RejectOrder");
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_Captures_when_all_as_fan_out_and_fan_in()
+    {
+        using var fixture = new TempSourceFixture("""
+using System.Threading.Tasks;
+
+public class Demo
+{
+    [OrchestrationTrigger]
+    public async Task Run(TaskOrchestrationContext ctx)
+    {
+        await Task.WhenAll(
+            ctx.CallActivityAsync("LoadDocuments"),
+            ctx.CallActivityAsync("ValidateAccount"));
+        await ctx.CallActivityAsync("Complete");
+    }
+}
+""");
+
+        var analyzer = new WorkflowAnalyzer();
+        var diagram = Assert.Single(await analyzer.AnalyzeAsync(fixture.DirectoryPath));
+
+        Assert.Contains(diagram.Nodes, node => node.NodeType == WorkflowNodeType.FanOut);
+        Assert.Contains(diagram.Nodes, node => node.NodeType == WorkflowNodeType.FanIn);
+        Assert.Contains(diagram.Nodes, node => node.DisplayLabel == "LoadDocuments");
+        Assert.Contains(diagram.Nodes, node => node.DisplayLabel == "ValidateAccount");
+        Assert.Contains(diagram.Nodes, node => node.DisplayLabel == "Complete");
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_DetectsConfiguredWrapperMethod()
     {
         using var fixture = new TempSourceFixture("""
@@ -122,6 +185,57 @@ public class Demo
 
         var diagram = Assert.Single(diagrams);
         Assert.Contains(diagram.Nodes, n => n.NodeType == WorkflowNodeType.Activity && n.Name == "DoWork");
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_Applies_business_step_overlays()
+    {
+        using var fixture = new TempSourceFixture("""
+using System.Threading.Tasks;
+
+public class Demo
+{
+    [OrchestrationTrigger]
+    public async Task Run(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ValidateOrder");
+        await ctx.CallActivityWithRetryAsync("ChargePayment");
+    }
+}
+""");
+
+        var config = new DurableDocConfig
+        {
+            BusinessView = new BusinessViewOptions
+            {
+                Steps =
+                [
+                    new BusinessStepOverlay
+                    {
+                        Orchestrator = "Run",
+                        Step = "ValidateOrder",
+                        Label = "Validate order",
+                        Group = "Review order",
+                    },
+                    new BusinessStepOverlay
+                    {
+                        Orchestrator = "Run",
+                        Step = "ChargePayment",
+                        Hide = true,
+                    },
+                ],
+            },
+        };
+
+        var analyzer = new WorkflowAnalyzer();
+        var diagram = Assert.Single(await analyzer.AnalyzeAsync(fixture.DirectoryPath, config));
+
+        var validateNode = Assert.Single(diagram.Nodes, node => node.Name == "ValidateOrder");
+        Assert.Equal("Validate order", validateNode.BusinessName);
+        Assert.Equal("Review order", validateNode.BusinessGroup);
+
+        var retryNode = Assert.Single(diagram.Nodes, node => node.Name == "ChargePayment");
+        Assert.True(retryNode.HideInBusiness);
     }
 
     [Fact]

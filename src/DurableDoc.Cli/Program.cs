@@ -16,6 +16,7 @@ root.AddCommand(CreateGenerateCommand(configOption, verbosityOption, ciOption, s
 root.AddCommand(CreateListCommand(configOption, verbosityOption, ciOption));
 root.AddCommand(CreateValidateCommand(configOption, verbosityOption, ciOption, strictOption));
 root.AddCommand(CreateDashboardCommand(verbosityOption, ciOption));
+root.AddCommand(CreateInternalDashboardServeCommand());
 
 return await root.InvokeAsync(args);
 
@@ -31,6 +32,9 @@ static Command CreateGenerateCommand(
     };
     var orchestratorOption = new Option<string?>("--orchestrator", "Optional orchestrator name filter");
     var modeOption = new Option<string>("--mode", () => "developer", "Diagram mode: developer or business");
+    var noDashboardOption = new Option<bool>("--no-dashboard", "Skip building and launching the dashboard assets");
+    var noOpenOption = new Option<bool>("--no-open", "Do not open the dashboard in a browser");
+    var portOption = new Option<int?>("--port", "Preferred localhost port for the dashboard server");
     var outputOption = new Option<DirectoryInfo>(
         "--output",
         () => new DirectoryInfo(Path.Combine(Directory.GetCurrentDirectory(), "docs", "diagrams")),
@@ -40,9 +44,23 @@ static Command CreateGenerateCommand(
     command.AddOption(inputOption);
     command.AddOption(orchestratorOption);
     command.AddOption(modeOption);
+    command.AddOption(noDashboardOption);
+    command.AddOption(noOpenOption);
+    command.AddOption(portOption);
     command.AddOption(outputOption);
-    command.SetHandler(async (string input, string? orchestrator, string mode, DirectoryInfo output, FileInfo? configFile, string verbosity, bool ci, bool strict) =>
+    command.SetHandler(async parseContext =>
     {
+        var input = parseContext.ParseResult.GetValueForOption(inputOption)!;
+        var orchestrator = parseContext.ParseResult.GetValueForOption(orchestratorOption);
+        var mode = parseContext.ParseResult.GetValueForOption(modeOption)!;
+        var noDashboard = parseContext.ParseResult.GetValueForOption(noDashboardOption);
+        var noOpen = parseContext.ParseResult.GetValueForOption(noOpenOption);
+        var port = parseContext.ParseResult.GetValueForOption(portOption);
+        var output = parseContext.ParseResult.GetValueForOption(outputOption)!;
+        var configFile = parseContext.ParseResult.GetValueForOption(configOption);
+        var verbosity = parseContext.ParseResult.GetValueForOption(verbosityOption)!;
+        var ci = parseContext.ParseResult.GetValueForOption(ciOption);
+        var strict = parseContext.ParseResult.GetValueForOption(strictOption);
         var context = CreateContext(verbosity, ci);
         Environment.ExitCode = await DurableDoc.Cli.GenerateCommandHandler.ExecuteAsync(
             input,
@@ -51,8 +69,11 @@ static Command CreateGenerateCommand(
             mode,
             configFile?.FullName,
             strict,
+            noDashboard,
+            noOpen,
+            port,
             context);
-    }, inputOption, orchestratorOption, modeOption, outputOption, configOption, verbosityOption, ciOption, strictOption);
+    });
 
     return command;
 }
@@ -116,15 +137,41 @@ static Command CreateDashboardCommand(Option<string> verbosityOption, Option<boo
     {
         IsRequired = true,
     };
+    var noOpenOption = new Option<bool>("--no-open", "Do not open the dashboard in a browser");
+    var portOption = new Option<int?>("--port", "Preferred localhost port for the dashboard server");
 
-    var command = new Command("dashboard", "Build the static dashboard from generated diagram artifacts");
+    var command = new Command("dashboard", "Build and serve the local dashboard from generated diagram artifacts");
     command.AddOption(inputOption);
-    command.SetHandler(async (string input, string verbosity, bool ci) =>
+    command.AddOption(noOpenOption);
+    command.AddOption(portOption);
+    command.SetHandler(async (string input, bool noOpen, int? port, string verbosity, bool ci) =>
     {
         var context = CreateContext(verbosity, ci);
-        Environment.ExitCode = await DurableDoc.Cli.DashboardCommandHandler.ExecuteAsync(input, context);
-    }, inputOption, verbosityOption, ciOption);
+        Environment.ExitCode = await DurableDoc.Cli.DashboardCommandHandler.ExecuteAsync(input, port, noOpen, context);
+    }, inputOption, noOpenOption, portOption, verbosityOption, ciOption);
 
+    return command;
+}
+
+static Command CreateInternalDashboardServeCommand()
+{
+    var inputOption = new Option<string>("--input")
+    {
+        IsRequired = true,
+    };
+    var portOption = new Option<int>("--port")
+    {
+        IsRequired = true,
+    };
+
+    var command = new Command("__dashboard-serve", "Internal durable-doc dashboard host");
+    command.AddOption(inputOption);
+    command.AddOption(portOption);
+    command.SetHandler(async (string input, int port) =>
+    {
+        Environment.ExitCode = await DurableDoc.Cli.DashboardCommandHandler.ExecuteServeLoopAsync(input, port);
+    }, inputOption, portOption);
+    command.IsHidden = true;
     return command;
 }
 

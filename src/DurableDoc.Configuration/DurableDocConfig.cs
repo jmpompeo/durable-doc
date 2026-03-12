@@ -54,6 +54,27 @@ public sealed class BusinessViewOptions
 {
     [JsonPropertyName("enabled")]
     public bool Enabled { get; set; } = true;
+
+    [JsonPropertyName("steps")]
+    public List<BusinessStepOverlay>? Steps { get; set; } = [];
+}
+
+public sealed class BusinessStepOverlay
+{
+    [JsonPropertyName("orchestrator")]
+    public string Orchestrator { get; set; } = string.Empty;
+
+    [JsonPropertyName("step")]
+    public string Step { get; set; } = string.Empty;
+
+    [JsonPropertyName("label")]
+    public string? Label { get; set; }
+
+    [JsonPropertyName("group")]
+    public string? Group { get; set; }
+
+    [JsonPropertyName("hide")]
+    public bool Hide { get; set; }
 }
 
 public sealed class RenderingOptions

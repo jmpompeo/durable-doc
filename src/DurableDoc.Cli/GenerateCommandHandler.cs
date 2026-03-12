@@ -14,6 +14,9 @@ public static class GenerateCommandHandler
         string mode,
         string? configPath,
         bool strict = false,
+        bool noDashboard = false,
+        bool noOpen = false,
+        int? port = null,
         CliCommandContext? context = null,
         CancellationToken cancellationToken = default)
     {
@@ -50,6 +53,13 @@ public static class GenerateCommandHandler
             }
 
             var generatedAt = DateTimeOffset.UtcNow;
+            var warningsByOrchestrator = diagnostics
+                .Where(diagnostic => diagnostic.Severity == CliDiagnosticSeverity.Warning && diagnostic.OrchestratorName is not null)
+                .GroupBy(diagnostic => diagnostic.OrchestratorName!, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    group => group.Key,
+                    group => (IReadOnlyList<string>)group.Select(FormatDiagnostic).ToArray(),
+                    StringComparer.OrdinalIgnoreCase);
             var artifacts = selectedDiagrams.Select(diagram => new GeneratedDiagramArtifact
             {
                 DiagramId = diagram.Id,
@@ -57,12 +67,37 @@ public static class GenerateCommandHandler
                 Mode = renderMode.ToString().ToLowerInvariant(),
                 GeneratedAt = generatedAt,
                 Mermaid = MermaidRenderer.Render(diagram, renderMode),
+                SourceFile = diagram.SourceFile,
+                SourceProjectPath = diagram.SourceProjectPath,
+                Warnings = warningsByOrchestrator.TryGetValue(diagram.OrchestratorName, out var warnings) ? warnings : [],
+                Nodes = diagram.Nodes,
+                Edges = diagram.Edges,
             });
 
-            var result = DashboardGenerator.WriteArtifactsAndBuild(outputDirectory, artifacts);
+            var generatedCount = DashboardGenerator.WriteArtifacts(outputDirectory, artifacts);
+            DashboardBuildResult? result = null;
+            if (!noDashboard)
+            {
+                result = DashboardGenerator.BuildFromArtifacts(outputDirectory);
+            }
 
-            context.Info($"Generated {result.DiagramCount} diagram(s) in {Path.GetFullPath(outputDirectory)}.");
-            context.Info($"Dashboard ready at {result.DashboardPath}");
+            context.Info($"Generated {generatedCount} diagram(s) in {Path.GetFullPath(outputDirectory)}.");
+
+            if (result is not null)
+            {
+                context.Info($"Dashboard ready at {result.DashboardPath}");
+
+                if (!context.Ci)
+                {
+                    var session = await DashboardServerLauncher.EnsureServerAsync(
+                        outputDirectory,
+                        port,
+                        openBrowser: !noOpen,
+                        cancellationToken).ConfigureAwait(false);
+                    context.Info($"Dashboard available at {session.Url}");
+                }
+            }
+
             return 0;
         }
         catch (Exception ex)
