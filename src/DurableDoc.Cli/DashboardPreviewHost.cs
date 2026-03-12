@@ -8,6 +8,8 @@ internal static class DashboardPreviewHost
     public static async Task PreviewAsync(
         string outputDirectory,
         CliCommandContext context,
+        string? orchestratorName,
+        string? mode,
         Func<Uri, CancellationToken, Task>? browserLauncher,
         CancellationToken cancellationToken)
     {
@@ -17,13 +19,14 @@ internal static class DashboardPreviewHost
 
         using var lifetime = DashboardPreviewLifetime.Create(cancellationToken);
         await using var session = await DashboardPreviewServer.StartAsync(outputDirectory, lifetime.Token).ConfigureAwait(false);
+        var dashboardUri = BuildDashboardUri(session.DashboardUri, orchestratorName, mode);
 
-        context.Output.WriteLine($"Dashboard preview at {session.DashboardUri}");
+        context.Output.WriteLine($"Dashboard preview at {dashboardUri}");
         context.Output.WriteLine("Press Ctrl+C to stop.");
 
         try
         {
-            await browserLauncher(session.DashboardUri, lifetime.Token).ConfigureAwait(false);
+            await browserLauncher(dashboardUri, lifetime.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (lifetime.Token.IsCancellationRequested)
         {
@@ -41,6 +44,30 @@ internal static class DashboardPreviewHost
         catch (OperationCanceledException) when (lifetime.Token.IsCancellationRequested)
         {
         }
+    }
+
+    private static Uri BuildDashboardUri(Uri baseUri, string? orchestratorName, string? mode)
+    {
+        if (string.IsNullOrWhiteSpace(orchestratorName) && string.IsNullOrWhiteSpace(mode))
+        {
+            return baseUri;
+        }
+
+        var builder = new UriBuilder(baseUri);
+        var query = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(orchestratorName))
+        {
+            query.Add($"orchestrator={Uri.EscapeDataString(orchestratorName)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(mode))
+        {
+            query.Add($"mode={Uri.EscapeDataString(mode)}");
+        }
+
+        builder.Query = string.Join("&", query);
+        return builder.Uri;
     }
 
     public static bool ValidateInteractivePreview(CliCommandContext context, bool openDashboard)

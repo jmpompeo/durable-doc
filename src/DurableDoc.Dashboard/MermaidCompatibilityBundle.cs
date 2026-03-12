@@ -1,0 +1,98 @@
+namespace DurableDoc.Dashboard;
+
+internal static class MermaidCompatibilityBundle
+{
+    public static string Render()
+    {
+        return """
+(function (global) {
+  function decodeLabel(value) {
+    return value
+      .replace(/\\"/g, '"')
+      .replace(/<br\/>/g, ' ')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function inferType(shape) {
+    if (shape.indexOf('{{') >= 0) return 'retry';
+    if (shape.indexOf('[[') >= 0) return 'external event';
+    if (shape.indexOf('[/') >= 0) return 'timer';
+    if (shape.indexOf('((') >= 0) return 'parallel';
+    if (shape.indexOf('{"') >= 0 || shape.indexOf('{') >= 0) return 'decision';
+    if (shape.indexOf('([') >= 0) return 'orchestrator';
+    return 'step';
+  }
+
+  function parse(source) {
+    var nodeRegex = /^\s*([A-Za-z0-9_]+)\s*(.+)$/;
+    var edgeRegex = /^\s*([A-Za-z0-9_]+)\s*-->\s*(?:\|([^|]*)\|\s*)?([A-Za-z0-9_]+)\s*$/;
+    var labelRegex = /"((?:\\.|[^"])*)"/;
+    var nodes = [];
+    var edges = [];
+
+    source.split(/\r?\n/).forEach(function (line) {
+      if (!line || line.indexOf('flowchart') === 0) {
+        return;
+      }
+
+      var edgeMatch = line.match(edgeRegex);
+      if (edgeMatch) {
+        edges.push({ from: edgeMatch[1], label: edgeMatch[2] || '', to: edgeMatch[3] });
+        return;
+      }
+
+      var nodeMatch = line.match(nodeRegex);
+      if (!nodeMatch) {
+        return;
+      }
+
+      var shape = nodeMatch[2];
+      var labelMatch = shape.match(labelRegex);
+      nodes.push({
+        id: nodeMatch[1],
+        label: decodeLabel(labelMatch ? labelMatch[1] : nodeMatch[1]),
+        type: inferType(shape)
+      });
+    });
+
+    return { nodes: nodes, edges: edges };
+  }
+
+  function render(container, source) {
+    var parsed = parse(source);
+    var nodeIndex = {};
+    parsed.nodes.forEach(function (node) { nodeIndex[node.id] = node; });
+
+    var nodeHtml = parsed.nodes.map(function (node) {
+      return '<div class="mermaid-node"><small>' + node.type + '</small><div>' + node.label + '</div></div>';
+    }).join('');
+
+    var edgeHtml = parsed.edges.map(function (edge) {
+      var from = nodeIndex[edge.from] ? nodeIndex[edge.from].label : edge.from;
+      var to = nodeIndex[edge.to] ? nodeIndex[edge.to].label : edge.to;
+      var label = edge.label ? ' [' + edge.label + ']' : '';
+      return '<li>' + from + label + ' -> ' + to + '</li>';
+    }).join('');
+
+    container.innerHTML =
+      '<div class="mermaid-local">' +
+        '<div class="mermaid-node-grid">' + nodeHtml + '</div>' +
+        '<ol class="mermaid-edges">' + edgeHtml + '</ol>' +
+      '</div>';
+  }
+
+  global.mermaid = {
+    initialize: function () {},
+    run: function (options) {
+      (options.nodes || []).forEach(function (node) {
+        render(node, node.textContent || '');
+      });
+      return Promise.resolve();
+    }
+  };
+})(window);
+""";
+    }
+}

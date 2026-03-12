@@ -5,15 +5,18 @@ namespace DurableDoc.Rendering.Mermaid;
 
 public static class MermaidRenderer
 {
-    public static string Render(WorkflowDiagram diagram, MermaidRenderMode mode = MermaidRenderMode.Developer)
+    public static WorkflowDiagram Prepare(WorkflowDiagram diagram, MermaidRenderMode mode = MermaidRenderMode.Developer)
     {
         ArgumentNullException.ThrowIfNull(diagram);
 
-        var effectiveDiagram = mode == MermaidRenderMode.Business
+        return mode == MermaidRenderMode.Business
             ? BusinessWorkflowTransformer.Transform(diagram)
             : diagram;
+    }
 
-        return MermaidFlowchartFormatter.Format(effectiveDiagram);
+    public static string Render(WorkflowDiagram diagram, MermaidRenderMode mode = MermaidRenderMode.Developer)
+    {
+        return MermaidFlowchartFormatter.Format(Prepare(diagram, mode));
     }
 
     private static class MermaidFlowchartFormatter

@@ -30,6 +30,8 @@ public static class DashboardCommandHandler
                 await DashboardPreviewHost.PreviewAsync(
                     inputDirectory,
                     context,
+                    orchestratorName: null,
+                    mode: null,
                     browserLauncher,
                     cancellationToken).ConfigureAwait(false);
             }
