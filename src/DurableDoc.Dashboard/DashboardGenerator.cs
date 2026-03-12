@@ -48,15 +48,17 @@ public static class DashboardGenerator
             throw new InvalidOperationException("No diagrams were provided for dashboard generation.");
         }
 
+        DiagramArtifactStore.RemoveStaleArtifacts(outputPath, materialized);
+
         foreach (var diagram in materialized)
         {
             DiagramArtifactStore.Write(outputPath, diagram);
         }
 
-        return WriteDashboard(outputPath, DiagramArtifactStore.Read(outputPath));
+        return WriteDashboard(outputPath, materialized);
     }
 
-    public static DashboardBuildResult BuildFromArtifacts(string inputDirectory)
+    public static IReadOnlyList<GeneratedDiagramArtifact> ReadArtifacts(string inputDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(inputDirectory);
 
@@ -72,7 +74,31 @@ public static class DashboardGenerator
             throw new InvalidOperationException($"No generated diagram artifacts were found in {inputPath}");
         }
 
+        return diagrams;
+    }
+
+    public static DashboardBuildResult BuildFromArtifacts(string inputDirectory)
+    {
+        var inputPath = Path.GetFullPath(inputDirectory);
+        var diagrams = ReadArtifacts(inputPath);
         return WriteDashboard(inputPath, diagrams);
+    }
+
+    public static DashboardBuildResult BuildDashboard(string outputDirectory, IEnumerable<GeneratedDiagramArtifact> diagrams)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(outputDirectory);
+        var outputPath = Path.GetFullPath(outputDirectory);
+        Directory.CreateDirectory(outputPath);
+        var materialized = diagrams
+            .OrderBy(diagram => diagram.OrchestratorName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(diagram => diagram.Mode, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (materialized.Length == 0)
+        {
+            throw new InvalidOperationException("No diagrams were provided for dashboard generation.");
+        }
+
+        return WriteDashboard(outputPath, materialized);
     }
 
     private static DashboardBuildResult WriteDashboard(string outputDirectory, IReadOnlyList<GeneratedDiagramArtifact> diagrams)
@@ -138,6 +164,33 @@ internal static class DiagramArtifactStore
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .Select(ReadArtifact)
             .ToArray();
+    }
+
+    public static void RemoveStaleArtifacts(string outputDirectory, IReadOnlyList<GeneratedDiagramArtifact> desiredArtifacts)
+    {
+        var desiredDiagramIds = desiredArtifacts
+            .Select(artifact => artifact.DiagramId)
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var existingArtifactPath in Directory.EnumerateFiles(outputDirectory, "*.diagram.json", SearchOption.TopDirectoryOnly))
+        {
+            var existingArtifact = ReadArtifact(existingArtifactPath);
+            if (desiredDiagramIds.Contains(existingArtifact.DiagramId))
+            {
+                continue;
+            }
+
+            File.Delete(existingArtifactPath);
+
+            if (!string.IsNullOrWhiteSpace(existingArtifact.MermaidFileName))
+            {
+                var mermaidPath = Path.Combine(outputDirectory, existingArtifact.MermaidFileName);
+                if (File.Exists(mermaidPath))
+                {
+                    File.Delete(mermaidPath);
+                }
+            }
+        }
     }
 
     private static GeneratedDiagramArtifact ReadArtifact(string path)

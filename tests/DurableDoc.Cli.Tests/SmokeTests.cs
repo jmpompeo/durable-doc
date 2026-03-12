@@ -33,15 +33,22 @@ public class Demo
         Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "dashboard.css")));
         Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "dashboard.js")));
         Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "dashboard-data.json")));
+        Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "dashboard.css")));
+        Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "dashboard.js")));
+        Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "dashboard-data.json")));
 
         var mermaid = File.ReadAllText(Directory.EnumerateFiles(fixture.OutputDirectory, "*.mmd").Single());
         var dashboard = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "index.html"));
         var bundle = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "mermaid.min.js"));
         var artifact = File.ReadAllText(Directory.EnumerateFiles(fixture.OutputDirectory, "*.diagram.json").Single());
         var dashboardData = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "dashboard-data.json"));
-
+        
         Assert.Contains("flowchart TD", mermaid);
         Assert.Contains("First", dashboard);
+        Assert.Contains("\"mode\": \"developer\"", dashboard, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("dashboard-bootstrap", dashboard, StringComparison.Ordinal);
+        Assert.Contains("dashboard.js", dashboard, StringComparison.Ordinal);
+        Assert.Contains("dashboard.css", dashboard, StringComparison.Ordinal);
         Assert.Contains("\"mode\": \"developer\"", dashboard, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("dashboard-bootstrap", dashboard, StringComparison.Ordinal);
         Assert.Contains("dashboard.js", dashboard, StringComparison.Ordinal);
@@ -50,6 +57,10 @@ public class Demo
         Assert.DoesNotContain("{{payload}}", dashboard, StringComparison.Ordinal);
         Assert.Contains(@"source.split(/\r?\n/)", bundle, StringComparison.Ordinal);
         Assert.DoesNotContain(@"<br\\/>", bundle, StringComparison.Ordinal);
+        Assert.Contains("\"nodes\": [", artifact, StringComparison.Ordinal);
+        Assert.Contains("\"edges\": [", artifact, StringComparison.Ordinal);
+        Assert.Contains("\"nodeType\": \"OrchestratorStart\"", artifact, StringComparison.Ordinal);
+        Assert.Contains("\"nodeType\": \"OrchestratorStart\"", dashboardData, StringComparison.Ordinal);
         Assert.Contains("\"nodes\": [", artifact, StringComparison.Ordinal);
         Assert.Contains("\"edges\": [", artifact, StringComparison.Ordinal);
         Assert.Contains("\"nodeType\": \"OrchestratorStart\"", artifact, StringComparison.Ordinal);
@@ -93,6 +104,93 @@ public class Demo
 
         Assert.Contains("\"orchestratorName\": \"Second\"", artifact);
         Assert.Contains("\"mode\": \"business\"", artifact);
+    }
+
+    [Fact]
+    public async Task Generate_honors_orchestrator_filter_when_output_contains_previous_artifacts()
+    {
+        using var fixture = new CliFixture(
+            """
+using System.Threading.Tasks;
+
+public class Demo
+{
+    [OrchestrationTrigger]
+    public async Task First(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ValidateOrder");
+    }
+
+    [OrchestrationTrigger]
+    public async Task Second(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ChargePayment");
+    }
+}
+""");
+
+        var initialExitCode = await DurableDoc.Cli.GenerateCommandHandler.ExecuteAsync(
+            fixture.SourceDirectory,
+            fixture.OutputDirectory,
+            orchestratorName: null,
+            mode: "developer",
+            configPath: null);
+
+        Assert.Equal(0, initialExitCode);
+        Assert.Equal(2, Directory.EnumerateFiles(fixture.OutputDirectory, "*.diagram.json").Count());
+
+        var filteredExitCode = await DurableDoc.Cli.GenerateCommandHandler.ExecuteAsync(
+            fixture.SourceDirectory,
+            fixture.OutputDirectory,
+            orchestratorName: "Second",
+            mode: "developer",
+            configPath: null);
+
+        Assert.Equal(0, filteredExitCode);
+        Assert.Single(Directory.EnumerateFiles(fixture.OutputDirectory, "*.diagram.json"));
+        Assert.Single(Directory.EnumerateFiles(fixture.OutputDirectory, "*.mmd"));
+
+        var dashboardData = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "dashboard-data.json"));
+        Assert.Contains("\"orchestratorName\": \"Second\"", dashboardData, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"orchestratorName\": \"First\"", dashboardData, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Generate_on_external_project_input_honors_orchestrator_filter()
+    {
+        using var fixture = new ProjectFixture(
+            """
+using System.Threading.Tasks;
+
+public class Demo
+{
+    [OrchestrationTrigger]
+    public async Task First(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ValidateOrder");
+    }
+
+    [OrchestrationTrigger]
+    public async Task Second(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ChargePayment");
+    }
+}
+""");
+
+        var exitCode = await DurableDoc.Cli.GenerateCommandHandler.ExecuteAsync(
+            fixture.ProjectPath,
+            fixture.OutputDirectory,
+            orchestratorName: "Second",
+            mode: "developer",
+            configPath: null);
+
+        Assert.Equal(0, exitCode);
+        Assert.Single(Directory.EnumerateFiles(fixture.OutputDirectory, "*.diagram.json"));
+
+        var dashboardData = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "dashboard-data.json"));
+        Assert.Contains("\"orchestratorName\": \"Second\"", dashboardData, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"orchestratorName\": \"First\"", dashboardData, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -164,14 +262,165 @@ public class Demo
 
         var dashboard = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "index.html"));
         Assert.Contains("Filter orchestrators", dashboard);
+        Assert.Contains("Filter orchestrators", dashboard);
         Assert.Contains("Run", dashboard);
         Assert.Contains("mermaid.min.js", dashboard);
+        Assert.Contains("dashboard.js", dashboard);
+        Assert.Contains("dashboard.css", dashboard);
         Assert.Contains("dashboard.js", dashboard);
         Assert.Contains("dashboard.css", dashboard);
         Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "mermaid.min.js")));
         Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "dashboard.css")));
         Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "dashboard.js")));
         Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "dashboard-data.json")));
+    }
+
+    [Fact]
+    public async Task Dashboard_on_source_project_input_generates_only_selected_orchestrator()
+    {
+        using var fixture = new ProjectFixture(
+            """
+using System.Threading.Tasks;
+
+public class Demo
+{
+    [OrchestrationTrigger]
+    public async Task First(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ValidateOrder");
+    }
+
+    [OrchestrationTrigger]
+    public async Task Second(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ChargePayment");
+    }
+}
+""");
+
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var context = new DurableDoc.Cli.CliCommandContext(output, error, DurableDoc.Cli.CliVerbosity.Normal, ci: false);
+        using var cancellation = new CancellationTokenSource();
+        Uri? launchedUri = null;
+
+        var commandTask = DurableDoc.Cli.DashboardCommandHandler.ExecuteAsync(
+            fixture.ProjectPath,
+            fixture.OutputDirectory,
+            orchestratorName: "Second",
+            mode: "developer",
+            configPath: null,
+            context: context,
+            openDashboard: true,
+            browserLauncher: (uri, _) =>
+            {
+                launchedUri = uri;
+                return Task.CompletedTask;
+            },
+            cancellationToken: cancellation.Token);
+
+        var previewUri = await WaitForPreviewUriAsync(output, commandTask);
+        Assert.Equal(previewUri, launchedUri);
+
+        using var client = new HttpClient();
+        var dashboard = await client.GetStringAsync(previewUri);
+
+        Assert.Equal("Second", GetQueryValue(previewUri, "orchestrator"));
+        Assert.Equal("developer", GetQueryValue(previewUri, "mode"));
+        Assert.Contains("Second", dashboard, StringComparison.Ordinal);
+        Assert.DoesNotContain("First", dashboard, StringComparison.Ordinal);
+
+        cancellation.Cancel();
+
+        var exitCode = await commandTask;
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(string.Empty, error.ToString());
+        Assert.Single(Directory.EnumerateFiles(fixture.OutputDirectory, "*.diagram.json"));
+    }
+
+    [Fact]
+    public async Task Dashboard_on_artifact_input_honors_orchestrator_filter()
+    {
+        using var fixture = new CliFixture(
+            """
+using System.Threading.Tasks;
+
+public class Demo
+{
+    [OrchestrationTrigger]
+    public async Task First(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ValidateOrder");
+    }
+
+    [OrchestrationTrigger]
+    public async Task Second(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ChargePayment");
+    }
+}
+""");
+
+        var generateExitCode = await DurableDoc.Cli.GenerateCommandHandler.ExecuteAsync(
+            fixture.SourceDirectory,
+            fixture.OutputDirectory,
+            orchestratorName: null,
+            mode: "developer",
+            configPath: null);
+
+        Assert.Equal(0, generateExitCode);
+        Assert.Equal(2, Directory.EnumerateFiles(fixture.OutputDirectory, "*.diagram.json").Count());
+
+        var dashboardExitCode = await DurableDoc.Cli.DashboardCommandHandler.ExecuteAsync(
+            fixture.OutputDirectory,
+            orchestratorName: "Second");
+
+        Assert.Equal(0, dashboardExitCode);
+        Assert.Equal(2, Directory.EnumerateFiles(fixture.OutputDirectory, "*.diagram.json").Count());
+
+        var dashboardData = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "dashboard-data.json"));
+        Assert.Contains("\"orchestratorName\": \"Second\"", dashboardData, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"orchestratorName\": \"First\"", dashboardData, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Dashboard_on_artifact_input_rejects_source_only_options()
+    {
+        using var fixture = new CliFixture(
+            """
+using System.Threading.Tasks;
+
+public class Demo
+{
+    [OrchestrationTrigger]
+    public async Task Run(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ValidateOrder");
+    }
+}
+""");
+
+        var generateExitCode = await DurableDoc.Cli.GenerateCommandHandler.ExecuteAsync(
+            fixture.SourceDirectory,
+            fixture.OutputDirectory,
+            orchestratorName: null,
+            mode: "developer",
+            configPath: null);
+
+        Assert.Equal(0, generateExitCode);
+
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var context = new DurableDoc.Cli.CliCommandContext(output, error, DurableDoc.Cli.CliVerbosity.Normal, ci: false);
+
+        var dashboardExitCode = await DurableDoc.Cli.DashboardCommandHandler.ExecuteAsync(
+            fixture.OutputDirectory,
+            outputDirectory: Path.Combine(fixture.OutputDirectory, "alt"),
+            context: context);
+
+        Assert.Equal(1, dashboardExitCode);
+        Assert.Contains("The '--output' option is only supported", error.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -223,7 +472,10 @@ public class Demo
 
         Assert.Equal("First", GetQueryValue(previewUri, "orchestrator"));
         Assert.Equal("developer", GetQueryValue(previewUri, "mode"));
+        Assert.Equal("First", GetQueryValue(previewUri, "orchestrator"));
+        Assert.Equal("developer", GetQueryValue(previewUri, "mode"));
         Assert.Contains("First", dashboard);
+        Assert.Contains("\"displayLabel\": \"First\"", dashboard, StringComparison.Ordinal);
         Assert.Contains("\"displayLabel\": \"First\"", dashboard, StringComparison.Ordinal);
         Assert.Contains(@"source.split(/\r?\n/)", bundle, StringComparison.Ordinal);
         Assert.Contains("Press Ctrl+C to stop.", output.ToString(), StringComparison.Ordinal);
@@ -713,6 +965,48 @@ public class Demo
             if (Directory.Exists(OutputDirectory))
             {
                 Directory.Delete(OutputDirectory, recursive: true);
+            }
+        }
+    }
+
+    private sealed class ProjectFixture : IDisposable
+    {
+        private readonly string _rootDirectory;
+
+        public ProjectFixture(string source)
+        {
+            _rootDirectory = Path.Combine(Path.GetTempPath(), "durable-doc-cli-projects", Guid.NewGuid().ToString("N"));
+            SourceDirectory = Path.Combine(_rootDirectory, "src");
+            OutputDirectory = Path.Combine(_rootDirectory, "out");
+            ProjectPath = Path.Combine(_rootDirectory, "ExternalApp.csproj");
+
+            Directory.CreateDirectory(SourceDirectory);
+            Directory.CreateDirectory(OutputDirectory);
+            File.WriteAllText(
+                ProjectPath,
+                """
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+</Project>
+""");
+            File.WriteAllText(Path.Combine(SourceDirectory, "Sample.cs"), source);
+        }
+
+        public string ProjectPath { get; }
+
+        public string SourceDirectory { get; }
+
+        public string OutputDirectory { get; }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(_rootDirectory))
+            {
+                Directory.Delete(_rootDirectory, recursive: true);
             }
         }
     }

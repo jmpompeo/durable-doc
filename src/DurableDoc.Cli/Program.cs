@@ -16,7 +16,7 @@ root.AddGlobalOption(strictOption);
 root.AddCommand(CreateGenerateCommand(configOption, verbosityOption, ciOption, strictOption));
 root.AddCommand(CreateListCommand(configOption, verbosityOption, ciOption));
 root.AddCommand(CreateValidateCommand(configOption, verbosityOption, ciOption, strictOption));
-root.AddCommand(CreateDashboardCommand(verbosityOption, ciOption));
+root.AddCommand(CreateDashboardCommand(configOption, verbosityOption, ciOption));
 
 return await root.InvokeAsync(args);
 
@@ -129,25 +129,45 @@ static Command CreateValidateCommand(
     return command;
 }
 
-static Command CreateDashboardCommand(Option<string> verbosityOption, Option<bool> ciOption)
+static Command CreateDashboardCommand(
+    Option<FileInfo?> configOption,
+    Option<string> verbosityOption,
+    Option<bool> ciOption)
 {
-    var inputOption = new Option<string>("--input", "Directory containing generated diagram artifacts")
+    var inputOption = new Option<string>("--input", "Path to generated diagram artifacts, a solution, a project, a source folder, or a single source file")
     {
         IsRequired = true,
     };
+    var orchestratorOption = new Option<string?>("--orchestrator", "Optional orchestrator name filter");
+    var modeOption = new Option<string?>("--mode", "Diagram mode for source inputs, or optional mode preselection when previewing artifacts");
+    var outputOption = new Option<DirectoryInfo?>("--output", "Directory for generated diagrams and dashboard when '--input' points to source");
     var openOption = new Option<bool>("--open", "Serve the dashboard on localhost and open it in the default browser");
 
-    var command = new Command("dashboard", "Build the static dashboard from generated diagram artifacts");
+    var command = new Command("dashboard", "Build the static dashboard from generated artifacts or directly from source input");
     command.AddOption(inputOption);
+    command.AddOption(orchestratorOption);
+    command.AddOption(modeOption);
+    command.AddOption(outputOption);
     command.AddOption(openOption);
     command.SetHandler(async (InvocationContext invocationContext) =>
     {
         var input = invocationContext.ParseResult.GetValueForOption(inputOption)!;
+        var orchestrator = invocationContext.ParseResult.GetValueForOption(orchestratorOption);
+        var mode = invocationContext.ParseResult.GetValueForOption(modeOption);
+        var output = invocationContext.ParseResult.GetValueForOption(outputOption);
         var open = invocationContext.ParseResult.GetValueForOption(openOption);
+        var configFile = invocationContext.ParseResult.GetValueForOption(configOption);
         var verbosity = invocationContext.ParseResult.GetValueForOption(verbosityOption)!;
         var ci = invocationContext.ParseResult.GetValueForOption(ciOption);
         var context = CreateContext(verbosity, ci);
-        Environment.ExitCode = await DurableDoc.Cli.DashboardCommandHandler.ExecuteAsync(input, context, open);
+        Environment.ExitCode = await DurableDoc.Cli.DashboardCommandHandler.ExecuteAsync(
+            input,
+            output?.FullName,
+            orchestrator,
+            mode,
+            configFile?.FullName,
+            context,
+            open);
     });
 
     return command;

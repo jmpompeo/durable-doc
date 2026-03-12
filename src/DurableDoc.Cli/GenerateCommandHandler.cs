@@ -43,15 +43,13 @@ public static class GenerateCommandHandler
                 return 1;
             }
 
-            var selectedDiagrams = analysis.Diagrams
-                .Where(diagram => string.IsNullOrWhiteSpace(orchestratorName) ||
-                    string.Equals(diagram.OrchestratorName, orchestratorName, StringComparison.OrdinalIgnoreCase))
-                .OrderBy(diagram => diagram.OrchestratorName, StringComparer.Ordinal)
-                .ToArray();
+            var selectedDiagrams = WorkflowSelection.FilterDiagrams(analysis.Diagrams, orchestratorName);
 
             if (selectedDiagrams.Length == 0)
             {
-                context.Fail(BuildFilterMismatchMessage(orchestratorName, analysis.Diagrams));
+                context.Fail(WorkflowSelection.BuildFilterMismatchMessage(
+                    orchestratorName,
+                    analysis.Diagrams.Select(diagram => diagram.OrchestratorName)));
                 return 1;
             }
 
@@ -67,29 +65,7 @@ public static class GenerateCommandHandler
                 return 1;
             }
 
-            var generatedAt = DateTimeOffset.UtcNow;
-            var artifacts = selectedDiagrams.Select(diagram =>
-            {
-                var renderedDiagram = MermaidRenderer.Prepare(diagram, renderMode).ToDeterministic();
-                return new GeneratedDiagramArtifact
-                {
-                    DiagramId = renderedDiagram.Id,
-                    OrchestratorName = renderedDiagram.OrchestratorName,
-                    Mode = renderMode.ToString().ToLowerInvariant(),
-                    GeneratedAt = generatedAt,
-                    Mermaid = MermaidRenderer.Render(renderedDiagram),
-                    SourceFile = renderedDiagram.SourceFile,
-                    SourceProjectPath = renderedDiagram.SourceProjectPath,
-                    Warnings = renderedDiagram.Diagnostics
-                        .Where(issue => issue.Severity == DurableDoc.Domain.WorkflowIssueSeverity.Warning)
-                        .Select(issue => issue.Message)
-                        .Distinct(StringComparer.Ordinal)
-                        .ToArray(),
-                    Nodes = renderedDiagram.Nodes,
-                    Edges = renderedDiagram.Edges,
-                    Diagnostics = renderedDiagram.Diagnostics,
-                };
-            });
+            var artifacts = CreateArtifacts(selectedDiagrams, renderMode);
 
             var result = DashboardGenerator.WriteArtifactsAndBuild(resolvedOutputDirectory, artifacts);
 
@@ -101,7 +77,9 @@ public static class GenerateCommandHandler
                 await DashboardPreviewHost.PreviewAsync(
                     resolvedOutputDirectory,
                     context,
-                    selectedDiagrams.Length == 1 ? selectedDiagrams[0].OrchestratorName : orchestratorName,
+                    WorkflowSelection.ResolvePreviewOrchestrator(
+                        orchestratorName,
+                        selectedDiagrams.Select(diagram => diagram.OrchestratorName)),
                     renderMode.ToString().ToLowerInvariant(),
                     browserLauncher,
                     cancellationToken).ConfigureAwait(false);
@@ -114,6 +92,35 @@ public static class GenerateCommandHandler
             context.Fail(ex.Message);
             return 1;
         }
+    }
+
+    internal static IReadOnlyList<GeneratedDiagramArtifact> CreateArtifacts(
+        IReadOnlyList<DurableDoc.Domain.WorkflowDiagram> diagrams,
+        MermaidRenderMode renderMode)
+    {
+        var generatedAt = DateTimeOffset.UtcNow;
+        return diagrams.Select(diagram =>
+        {
+            var renderedDiagram = MermaidRenderer.Prepare(diagram, renderMode).ToDeterministic();
+            return new GeneratedDiagramArtifact
+            {
+                DiagramId = renderedDiagram.Id,
+                OrchestratorName = renderedDiagram.OrchestratorName,
+                Mode = renderMode.ToString().ToLowerInvariant(),
+                GeneratedAt = generatedAt,
+                Mermaid = MermaidRenderer.Render(renderedDiagram),
+                SourceFile = renderedDiagram.SourceFile,
+                SourceProjectPath = renderedDiagram.SourceProjectPath,
+                Warnings = renderedDiagram.Diagnostics
+                    .Where(issue => issue.Severity == DurableDoc.Domain.WorkflowIssueSeverity.Warning)
+                    .Select(issue => issue.Message)
+                    .Distinct(StringComparer.Ordinal)
+                    .ToArray(),
+                Nodes = renderedDiagram.Nodes,
+                Edges = renderedDiagram.Edges,
+                Diagnostics = renderedDiagram.Diagnostics,
+            };
+        }).ToArray();
     }
 
     private static string ParseFormat(string? format, DurableDocConfig config)
@@ -135,7 +142,7 @@ public static class GenerateCommandHandler
         return "mermaid";
     }
 
-    private static string ResolveOutputDirectory(string? outputDirectory, DurableDocConfig config)
+    internal static string ResolveOutputDirectory(string? outputDirectory, DurableDocConfig config)
     {
         if (!string.IsNullOrWhiteSpace(outputDirectory))
         {
@@ -150,7 +157,7 @@ public static class GenerateCommandHandler
         return Path.Combine(Directory.GetCurrentDirectory(), "docs", "diagrams");
     }
 
-    private static MermaidRenderMode ParseMode(string mode)
+    internal static MermaidRenderMode ParseMode(string mode)
     {
         if (Enum.TryParse<MermaidRenderMode>(mode, ignoreCase: true, out var renderMode))
         {
@@ -183,9 +190,4 @@ public static class GenerateCommandHandler
         return builder.ToString();
     }
 
-    internal static string BuildFilterMismatchMessage(string? orchestratorName, IReadOnlyList<DurableDoc.Domain.WorkflowDiagram> diagrams)
-    {
-        var discovered = string.Join(", ", diagrams.Select(diagram => diagram.OrchestratorName).OrderBy(name => name, StringComparer.Ordinal));
-        return $"No orchestrators matched filter '{orchestratorName}'. Discovered orchestrators: {discovered}.";
-    }
 }

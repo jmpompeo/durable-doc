@@ -8,7 +8,7 @@
 - Input types: solution, project, source folder, or single `.cs` file
 - Diagram modes: `developer` and `business`
 - Renderer: Mermaid output
-- Dashboard: static offline HTML with local JS assets
+- Dashboard: static offline HTML with local JS assets, built either from generated artifacts or directly from source input
 - Optional local preview: `--open` serves the dashboard on `localhost` and opens it in your browser
 - Config: `durable-doc.json` for defaults, wrapper rules, include/exclude filters, and business-view overrides
 
@@ -19,6 +19,7 @@ durable-doc list --input ./durable-doc.sln
 durable-doc validate --input ./samples/DurableDoc.Sample.Advanced/DurableDoc.Sample.Advanced.csproj --strict
 durable-doc generate --input ./samples/DurableDoc.Sample.Advanced/DurableDoc.Sample.Advanced.csproj --orchestrator RunCustomerOnboarding --mode developer --format mermaid --output ./docs/diagrams
 durable-doc dashboard --input ./docs/diagrams
+durable-doc dashboard --input ./samples/DurableDoc.Sample.Advanced/DurableDoc.Sample.Advanced.csproj --orchestrator RunCustomerOnboarding --mode developer --output ./docs/diagrams
 durable-doc generate --input ./samples/DurableDoc.Sample.Advanced/DurableDoc.Sample.Advanced.csproj --output ./docs/diagrams --open
 ```
 
@@ -56,6 +57,10 @@ durable-doc generate --input ./samples/DurableDoc.Sample.Advanced/DurableDoc.Sam
 ## Solution input behavior
 
 When `--input` points to a `.sln`, discovery is strict: only projects included in that solution are analyzed. If the orchestrator lives outside the solution, use the `.csproj` path or a folder path instead.
+
+## Dashboard input behavior
+
+`dashboard --input` accepts either a generated artifact directory or source input (`.sln`, `.csproj`, `.cs`, or a source folder). When source input is used, `--output` follows the same default resolution as `generate`.
 
 ## Repository layout
 
