@@ -17,12 +17,19 @@ public static class GenerateCommandHandler
         string? configPath = null,
         bool strict = false,
         CliCommandContext? context = null,
+        bool openDashboard = false,
+        Func<Uri, CancellationToken, Task>? browserLauncher = null,
         CancellationToken cancellationToken = default)
     {
         context ??= CliCommandContext.CreateDefault();
 
         try
         {
+            if (!DashboardPreviewHost.ValidateInteractivePreview(context, openDashboard))
+            {
+                return 1;
+            }
+
             var config = DurableDocConfigLoader.Load(configPath);
             var renderMode = ParseMode(mode);
             ParseFormat(format, config);
@@ -81,6 +88,16 @@ public static class GenerateCommandHandler
 
             context.Info($"Generated {result.DiagramCount} diagram(s) in {Path.GetFullPath(resolvedOutputDirectory)}.");
             context.Info($"Dashboard ready at {result.DashboardPath}");
+
+            if (openDashboard)
+            {
+                await DashboardPreviewHost.PreviewAsync(
+                    resolvedOutputDirectory,
+                    context,
+                    browserLauncher,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
             return 0;
         }
         catch (Exception ex)
