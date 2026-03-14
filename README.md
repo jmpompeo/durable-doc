@@ -2,7 +2,7 @@
 
 `durable-doc` analyzes Azure Durable Functions orchestration code written in C# and generates workflow diagrams plus a lightweight local dashboard.
 
-## Current MVP
+## Current capabilities
 
 - CLI commands: `generate`, `list`, `validate`, `dashboard`
 - Input types: solution, project, source folder, or single `.cs` file
@@ -11,6 +11,37 @@
 - Dashboard: static offline HTML with local JS assets, built either from generated artifacts or directly from source input
 - Optional local preview: `--open` serves the dashboard on `localhost` and opens it in your browser
 - Config: `durable-doc.json` for defaults, wrapper rules, include/exclude filters, and business-view overrides
+
+## Installation
+
+When public NuGet publishing is enabled, install a specific version with:
+
+```bash
+dotnet tool install --global durable-doc --version <version>
+```
+
+Update an existing installation with:
+
+```bash
+dotnet tool update --global durable-doc --version <version>
+```
+
+Preview packages require an explicit `--version`, for example `0.2.0-preview.1`.
+
+For local development before public publishing is enabled, pack the tool and install from a local source:
+
+```bash
+dotnet pack ./src/DurableDoc.Cli/DurableDoc.Cli.csproj -o ./artifacts/tool
+dotnet tool install --global durable-doc --add-source ./artifacts/tool --version 0.0.0-dev
+```
+
+## Quick start
+
+Generate diagrams and preview the dashboard locally:
+
+```bash
+durable-doc generate --input ./samples/DurableDoc.Sample.Advanced/DurableDoc.Sample.Advanced.csproj --output ./docs/diagrams --open
+```
 
 ## CLI examples
 
