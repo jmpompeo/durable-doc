@@ -754,6 +754,157 @@ public class Demo
     }
 
     [Fact]
+    public async Task Validate_warns_when_stakeholder_metadata_is_incomplete()
+    {
+        using var fixture = new CliFixture(
+            """
+using System.Threading.Tasks;
+
+public class Demo
+{
+    [OrchestrationTrigger]
+    public async Task Run(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ValidateOrder");
+    }
+}
+""");
+
+        var configPath = fixture.WriteConfig(
+            """
+            {
+              "version": 1,
+              "businessView": {
+                "orchestrators": [
+                  {
+                    "name": "Run",
+                    "businessName": "Order intake"
+                  }
+                ]
+              }
+            }
+            """);
+
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var context = new DurableDoc.Cli.CliCommandContext(output, error, DurableDoc.Cli.CliVerbosity.Normal, ci: false);
+
+        var exitCode = await DurableDoc.Cli.ValidateCommandHandler.ExecuteAsync(
+            fixture.SourceDirectory,
+            audience: "stakeholder",
+            configPath: configPath,
+            strict: false,
+            context: context);
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("missing 'summary'", error.ToString(), StringComparison.Ordinal);
+        Assert.Contains("missing 'capability'", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Generate_stakeholder_defaults_to_business_mode_and_persists_metadata()
+    {
+        using var fixture = new CliFixture(
+            """
+using System.Threading.Tasks;
+
+public class Demo
+{
+    [OrchestrationTrigger]
+    public async Task Run(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ValidateOrder");
+        await ctx.CallActivityAsync("CreateAccount");
+    }
+}
+""");
+
+        var configPath = fixture.WriteConfig(
+            """
+            {
+              "version": 1,
+              "businessView": {
+                "orchestrators": [
+                  {
+                    "name": "Run",
+                    "businessName": "Customer onboarding",
+                    "summary": "Validates the order and opens the account.",
+                    "capability": "Onboarding",
+                    "audienceNotes": "Track completion during weekly launch reviews.",
+                    "outcomes": ["Order validated", "Account created"],
+                    "steps": [
+                      { "name": "ValidateOrder", "businessName": "Validate order" },
+                      { "name": "CreateAccount", "businessName": "Create account" }
+                    ]
+                  }
+                ]
+              }
+            }
+            """);
+
+        var exitCode = await DurableDoc.Cli.GenerateCommandHandler.ExecuteAsync(
+            fixture.SourceDirectory,
+            fixture.OutputDirectory,
+            orchestratorName: null,
+            mode: null,
+            configPath: configPath,
+            strict: false,
+            audience: "stakeholder");
+
+        Assert.Equal(0, exitCode);
+
+        var artifact = File.ReadAllText(Directory.EnumerateFiles(fixture.OutputDirectory, "*.diagram.json").Single());
+        var dashboard = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "index.html"));
+        var dashboardCss = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "dashboard.css"));
+
+        Assert.Contains("\"mode\": \"business\"", artifact, StringComparison.Ordinal);
+        Assert.Contains("\"audience\": \"stakeholder\"", artifact, StringComparison.Ordinal);
+        Assert.Contains("\"capability\": \"Onboarding\"", artifact, StringComparison.Ordinal);
+        Assert.Contains("\"summary\": \"Validates the order and opens the account.\"", artifact, StringComparison.Ordinal);
+        Assert.Contains("\"outcomes\": [", artifact, StringComparison.Ordinal);
+        Assert.Contains("data-audience=\"stakeholder\"", dashboard, StringComparison.Ordinal);
+        Assert.Contains("stakeholder-overview", dashboard, StringComparison.Ordinal);
+        Assert.Contains("technical-only", dashboard, StringComparison.Ordinal);
+        Assert.Contains("body[data-audience=\"stakeholder\"] .technical-only", dashboardCss, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Dashboard_on_artifact_input_can_render_stakeholder_audience()
+    {
+        using var fixture = new CliFixture(
+            """
+using System.Threading.Tasks;
+
+public class Demo
+{
+    [OrchestrationTrigger]
+    public async Task Run(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ValidateOrder");
+    }
+}
+""");
+
+        var generateExitCode = await DurableDoc.Cli.GenerateCommandHandler.ExecuteAsync(
+            fixture.SourceDirectory,
+            fixture.OutputDirectory,
+            orchestratorName: null,
+            mode: "developer",
+            configPath: null);
+
+        Assert.Equal(0, generateExitCode);
+
+        var dashboardExitCode = await DurableDoc.Cli.DashboardCommandHandler.ExecuteAsync(
+            fixture.OutputDirectory,
+            audience: "stakeholder");
+
+        Assert.Equal(0, dashboardExitCode);
+
+        var dashboard = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "index.html"));
+        Assert.Contains("data-audience=\"stakeholder\"", dashboard, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Generate_quiet_suppresses_non_error_output()
     {
         using var fixture = new CliFixture(

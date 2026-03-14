@@ -11,6 +11,7 @@ public static class DashboardCommandHandler
         string? outputDirectory = null,
         string? orchestratorName = null,
         string? mode = null,
+        string audience = "developer",
         string? configPath = null,
         CliCommandContext? context = null,
         bool openDashboard = false,
@@ -29,6 +30,7 @@ public static class DashboardCommandHandler
             }
 
             var inputKind = ResolveInputKind(inputPath);
+            var parsedAudience = GenerateCommandHandler.ParseAudience(audience);
             DashboardBuildResult result;
             string previewDirectory;
             string? previewMode = mode;
@@ -51,7 +53,7 @@ public static class DashboardCommandHandler
                         return 1;
                     }
 
-                    result = DashboardGenerator.BuildDashboard(inputPath, selectedArtifacts);
+                    result = DashboardGenerator.BuildDashboard(inputPath, selectedArtifacts, parsedAudience);
                     previewDirectory = inputPath;
                     selectedOrchestratorNames = selectedArtifacts.Select(artifact => artifact.OrchestratorName).ToArray();
                     break;
@@ -59,8 +61,8 @@ public static class DashboardCommandHandler
                 case DashboardInputKind.Source:
                 {
                     var config = DurableDocConfigLoader.Load(configPath);
-                    var renderMode = GenerateCommandHandler.ParseMode(mode ?? "developer");
-                    var resolvedOutputDirectory = GenerateCommandHandler.ResolveOutputDirectory(outputDirectory, config);
+                    var renderMode = GenerateCommandHandler.ParseMode(mode, parsedAudience);
+                    var resolvedOutputDirectory = GenerateCommandHandler.ResolveOutputDirectory(outputDirectory, config, parsedAudience);
                     var analyzer = new WorkflowAnalyzer();
                     var analysis = await analyzer.AnalyzeWorkspaceAsync(inputPath, config, cancellationToken).ConfigureAwait(false);
 
@@ -81,7 +83,8 @@ public static class DashboardCommandHandler
 
                     result = DashboardGenerator.WriteArtifactsAndBuild(
                         resolvedOutputDirectory,
-                        GenerateCommandHandler.CreateArtifacts(selectedDiagrams, renderMode));
+                        GenerateCommandHandler.CreateArtifacts(selectedDiagrams, renderMode, config, parsedAudience),
+                        parsedAudience);
                     previewDirectory = resolvedOutputDirectory;
                     previewMode = renderMode.ToString().ToLowerInvariant();
                     selectedOrchestratorNames = selectedDiagrams.Select(diagram => diagram.OrchestratorName).ToArray();

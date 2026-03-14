@@ -31,7 +31,8 @@ static Command CreateGenerateCommand(
         IsRequired = true,
     };
     var orchestratorOption = new Option<string?>("--orchestrator", "Optional orchestrator name filter");
-    var modeOption = new Option<string>("--mode", () => "developer", "Diagram mode: developer or business");
+    var modeOption = new Option<string?>("--mode", "Diagram mode: developer or business. Defaults to 'business' for stakeholder audience, otherwise 'developer'.");
+    var audienceOption = new Option<string>("--audience", () => "developer", "Dashboard audience: developer or stakeholder");
     var formatOption = new Option<string?>("--format", "Output format. MVP supports 'mermaid'.");
     var outputOption = new Option<DirectoryInfo?>(
         "--output",
@@ -42,6 +43,7 @@ static Command CreateGenerateCommand(
     command.AddOption(inputOption);
     command.AddOption(orchestratorOption);
     command.AddOption(modeOption);
+    command.AddOption(audienceOption);
     command.AddOption(formatOption);
     command.AddOption(outputOption);
     command.AddOption(openOption);
@@ -50,6 +52,7 @@ static Command CreateGenerateCommand(
         var input = invocationContext.ParseResult.GetValueForOption(inputOption)!;
         var orchestrator = invocationContext.ParseResult.GetValueForOption(orchestratorOption);
         var mode = invocationContext.ParseResult.GetValueForOption(modeOption)!;
+        var audience = invocationContext.ParseResult.GetValueForOption(audienceOption)!;
         var format = invocationContext.ParseResult.GetValueForOption(formatOption);
         var output = invocationContext.ParseResult.GetValueForOption(outputOption);
         var open = invocationContext.ParseResult.GetValueForOption(openOption);
@@ -67,7 +70,8 @@ static Command CreateGenerateCommand(
             configFile?.FullName,
             strict,
             context,
-            open);
+            open,
+            audience: audience);
     });
 
     return command;
@@ -111,20 +115,23 @@ static Command CreateValidateCommand(
         IsRequired = true,
     };
     var orchestratorOption = new Option<string?>("--orchestrator", "Optional orchestrator name filter");
+    var audienceOption = new Option<string>("--audience", () => "developer", "Validation audience: developer or stakeholder");
 
     var command = new Command("validate", "Validate configuration and analyze the requested input for warnings");
     command.AddOption(inputOption);
     command.AddOption(orchestratorOption);
-    command.SetHandler(async (string input, string? orchestrator, FileInfo? configFile, string verbosity, bool ci, bool strict) =>
+    command.AddOption(audienceOption);
+    command.SetHandler(async (string input, string? orchestrator, string audience, FileInfo? configFile, string verbosity, bool ci, bool strict) =>
     {
         var context = CreateContext(verbosity, ci);
         Environment.ExitCode = await DurableDoc.Cli.ValidateCommandHandler.ExecuteAsync(
             input,
             orchestrator,
+            audience,
             configFile?.FullName,
             strict,
             context);
-    }, inputOption, orchestratorOption, configOption, verbosityOption, ciOption, strictOption);
+    }, inputOption, orchestratorOption, audienceOption, configOption, verbosityOption, ciOption, strictOption);
 
     return command;
 }
@@ -140,6 +147,7 @@ static Command CreateDashboardCommand(
     };
     var orchestratorOption = new Option<string?>("--orchestrator", "Optional orchestrator name filter");
     var modeOption = new Option<string?>("--mode", "Diagram mode for source inputs, or optional mode preselection when previewing artifacts");
+    var audienceOption = new Option<string>("--audience", () => "developer", "Dashboard audience: developer or stakeholder");
     var outputOption = new Option<DirectoryInfo?>("--output", "Directory for generated diagrams and dashboard when '--input' points to source");
     var openOption = new Option<bool>("--open", "Serve the dashboard on localhost and open it in the default browser");
 
@@ -147,6 +155,7 @@ static Command CreateDashboardCommand(
     command.AddOption(inputOption);
     command.AddOption(orchestratorOption);
     command.AddOption(modeOption);
+    command.AddOption(audienceOption);
     command.AddOption(outputOption);
     command.AddOption(openOption);
     command.SetHandler(async (InvocationContext invocationContext) =>
@@ -154,6 +163,7 @@ static Command CreateDashboardCommand(
         var input = invocationContext.ParseResult.GetValueForOption(inputOption)!;
         var orchestrator = invocationContext.ParseResult.GetValueForOption(orchestratorOption);
         var mode = invocationContext.ParseResult.GetValueForOption(modeOption);
+        var audience = invocationContext.ParseResult.GetValueForOption(audienceOption)!;
         var output = invocationContext.ParseResult.GetValueForOption(outputOption);
         var open = invocationContext.ParseResult.GetValueForOption(openOption);
         var configFile = invocationContext.ParseResult.GetValueForOption(configOption);
@@ -165,6 +175,7 @@ static Command CreateDashboardCommand(
             output?.FullName,
             orchestrator,
             mode,
+            audience,
             configFile?.FullName,
             context,
             open);

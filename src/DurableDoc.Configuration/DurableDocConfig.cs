@@ -85,6 +85,18 @@ public sealed class OrchestratorMetadata
     [JsonPropertyName("businessName")]
     public string? BusinessName { get; set; }
 
+    [JsonPropertyName("summary")]
+    public string? Summary { get; set; }
+
+    [JsonPropertyName("capability")]
+    public string? Capability { get; set; }
+
+    [JsonPropertyName("audienceNotes")]
+    public string? AudienceNotes { get; set; }
+
+    [JsonPropertyName("outcomes")]
+    public List<string>? Outcomes { get; set; } = [];
+
     [JsonPropertyName("notes")]
     public string? Notes { get; set; }
 

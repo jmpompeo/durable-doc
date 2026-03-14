@@ -120,6 +120,63 @@ public class SmokeTests
         Assert.Contains("Duplicate business view step names", ex.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Load_ParsesStakeholderMetadata()
+    {
+        using var fixture = new ConfigFixture();
+        var configPath = fixture.WriteConfig(
+            """
+            {
+              "version": 1,
+              "businessView": {
+                "orchestrators": [
+                  {
+                    "name": "Run",
+                    "businessName": "Customer onboarding",
+                    "summary": "Guides a customer through validation and account setup.",
+                    "capability": "Onboarding",
+                    "audienceNotes": "Keep support informed before approval waits exceed 24 hours.",
+                    "outcomes": ["Account created", "Welcome email sent"]
+                  }
+                ]
+              }
+            }
+            """);
+
+        var config = DurableDocConfigLoader.Load(configPath, fixture.WorkingDirectory);
+        var orchestrator = Assert.Single(config.BusinessView!.Orchestrators!);
+
+        Assert.Equal("Customer onboarding", orchestrator.BusinessName);
+        Assert.Equal("Guides a customer through validation and account setup.", orchestrator.Summary);
+        Assert.Equal("Onboarding", orchestrator.Capability);
+        Assert.Equal("Keep support informed before approval waits exceed 24 hours.", orchestrator.AudienceNotes);
+        Assert.Equal(["Account created", "Welcome email sent"], orchestrator.Outcomes);
+    }
+
+    [Fact]
+    public void Load_ThrowsForBlankStakeholderOutcome()
+    {
+        using var fixture = new ConfigFixture();
+        var configPath = fixture.WriteConfig(
+            """
+            {
+              "version": 1,
+              "businessView": {
+                "orchestrators": [
+                  {
+                    "name": "Run",
+                    "outcomes": ["Account created", ""]
+                  }
+                ]
+              }
+            }
+            """);
+
+        var ex = Assert.Throws<ConfigValidationException>(() => DurableDocConfigLoader.Load(configPath, fixture.WorkingDirectory));
+
+        Assert.Contains("cannot be blank", ex.Message, StringComparison.Ordinal);
+    }
+
     private sealed class ConfigFixture : IDisposable
     {
         public ConfigFixture()

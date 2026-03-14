@@ -1,4 +1,5 @@
 using DurableDoc.Configuration;
+using DurableDoc.Dashboard;
 using DurableDoc.Domain;
 using System.IO;
 
@@ -14,7 +15,10 @@ public sealed record CliDiagnostic(CliDiagnosticSeverity Severity, string Messag
 
 internal static class CliDiagnostics
 {
-    public static IReadOnlyList<CliDiagnostic> Evaluate(IReadOnlyList<WorkflowDiagram> diagrams, DurableDocConfig? config = null)
+    public static IReadOnlyList<CliDiagnostic> Evaluate(
+        IReadOnlyList<WorkflowDiagram> diagrams,
+        DurableDocConfig? config = null,
+        DashboardAudience audience = DashboardAudience.Developer)
     {
         var diagnostics = new List<CliDiagnostic>();
 
@@ -53,19 +57,52 @@ internal static class CliDiagnostics
             }
         }
 
-        diagnostics.AddRange(ValidateMetadata(diagrams, config));
+        diagnostics.AddRange(ValidateMetadata(diagrams, config, audience));
         return diagnostics;
     }
 
-    private static IEnumerable<CliDiagnostic> ValidateMetadata(IReadOnlyList<WorkflowDiagram> diagrams, DurableDocConfig? config)
+    private static IEnumerable<CliDiagnostic> ValidateMetadata(
+        IReadOnlyList<WorkflowDiagram> diagrams,
+        DurableDocConfig? config,
+        DashboardAudience audience)
     {
-        if (config?.BusinessView?.Orchestrators is null)
+        var diagramsByName = diagrams.ToDictionary(diagram => diagram.OrchestratorName, StringComparer.OrdinalIgnoreCase);
+        var metadataByName = (config?.BusinessView?.Orchestrators ?? [])
+            .Where(orchestrator => !string.IsNullOrWhiteSpace(orchestrator.Name))
+            .ToDictionary(orchestrator => orchestrator.Name, StringComparer.OrdinalIgnoreCase);
+
+        if (audience == DashboardAudience.Stakeholder)
         {
-            yield break;
+            foreach (var diagram in diagrams)
+            {
+                if (!metadataByName.TryGetValue(diagram.OrchestratorName, out var stakeholderMetadata))
+                {
+                    yield return new CliDiagnostic(
+                        CliDiagnosticSeverity.Warning,
+                        $"Stakeholder audience requested, but orchestrator '{diagram.OrchestratorName}' is missing business metadata with 'summary' and 'capability'.",
+                        diagram.OrchestratorName);
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(stakeholderMetadata.Summary))
+                {
+                    yield return new CliDiagnostic(
+                        CliDiagnosticSeverity.Warning,
+                        "Stakeholder audience requested, but business metadata is missing 'summary'.",
+                        diagram.OrchestratorName);
+                }
+
+                if (string.IsNullOrWhiteSpace(stakeholderMetadata.Capability))
+                {
+                    yield return new CliDiagnostic(
+                        CliDiagnosticSeverity.Warning,
+                        "Stakeholder audience requested, but business metadata is missing 'capability'.",
+                        diagram.OrchestratorName);
+                }
+            }
         }
 
-        var diagramsByName = diagrams.ToDictionary(diagram => diagram.OrchestratorName, StringComparer.OrdinalIgnoreCase);
-        foreach (var orchestrator in config.BusinessView.Orchestrators)
+        foreach (var orchestrator in metadataByName.Values)
         {
             if (!diagramsByName.TryGetValue(orchestrator.Name, out var diagram))
             {
