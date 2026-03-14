@@ -1,0 +1,68 @@
+name: preview-release-changelog
+
+on:
+  push:
+    branches: [ main ]
+
+concurrency:
+  group: preview-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  tag-and-generate-changelog:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch tags
+        run: git fetch --force --tags origin
+
+      - name: Install git-cliff
+        uses: taiki-e/install-action@git-cliff
+
+      - name: Compute next preview release tag
+        id: next_tag
+        run: scripts/next-release-tag.sh >> "$GITHUB_OUTPUT"
+
+      - name: Stop when there are no releasable commits
+        if: ${{ steps.next_tag.outputs.should_release != 'true' }}
+        run: echo "No releasable commits found after the latest release tag."
+
+      - name: Configure git author
+        if: ${{ steps.next_tag.outputs.should_release == 'true' && steps.next_tag.outputs.tag_already_exists != 'true' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Create and push annotated tag
+        if: ${{ steps.next_tag.outputs.should_release == 'true' && steps.next_tag.outputs.tag_already_exists != 'true' }}
+        run: |
+          git tag -a "${{ steps.next_tag.outputs.release_tag }}" -m "Release ${{ steps.next_tag.outputs.release_tag }}"
+          git push origin "refs/tags/${{ steps.next_tag.outputs.release_tag }}"
+
+      - name: Ensure changelog output directory exists
+        if: ${{ steps.next_tag.outputs.should_release == 'true' }}
+        run: mkdir -p artifacts/changelog
+
+      - name: Generate release changelog
+        if: ${{ steps.next_tag.outputs.should_release == 'true' }}
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --current --verbose --offline
+        env:
+          OUTPUT: ${{ steps.next_tag.outputs.changelog_path }}
+          GITHUB_REPO: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload changelog artifact
+        if: ${{ steps.next_tag.outputs.should_release == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.next_tag.outputs.artifact_name }}
+          path: ${{ steps.next_tag.outputs.changelog_path }}
