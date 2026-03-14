@@ -12,13 +12,14 @@ public static class GenerateCommandHandler
         string inputPath,
         string? outputDirectory,
         string? orchestratorName,
-        string mode,
+        string? mode,
         string? format = null,
         string? configPath = null,
         bool strict = false,
         CliCommandContext? context = null,
         bool openDashboard = false,
         Func<Uri, CancellationToken, Task>? browserLauncher = null,
+        string audience = "developer",
         CancellationToken cancellationToken = default)
     {
         context ??= CliCommandContext.CreateDefault();
@@ -31,9 +32,10 @@ public static class GenerateCommandHandler
             }
 
             var config = DurableDocConfigLoader.Load(configPath);
-            var renderMode = ParseMode(mode);
+            var parsedAudience = ParseAudience(audience);
+            var renderMode = ParseMode(mode, parsedAudience);
             ParseFormat(format, config);
-            var resolvedOutputDirectory = ResolveOutputDirectory(outputDirectory, config);
+            var resolvedOutputDirectory = ResolveOutputDirectory(outputDirectory, config, parsedAudience);
             var analyzer = new WorkflowAnalyzer();
             var analysis = await analyzer.AnalyzeWorkspaceAsync(inputPath, config, cancellationToken).ConfigureAwait(false);
 
@@ -53,7 +55,7 @@ public static class GenerateCommandHandler
                 return 1;
             }
 
-            var diagnostics = CliDiagnostics.Evaluate(selectedDiagrams, config);
+            var diagnostics = CliDiagnostics.Evaluate(selectedDiagrams, config, parsedAudience);
             foreach (var warning in diagnostics.Where(d => d.Severity == CliDiagnosticSeverity.Warning))
             {
                 context.Warn(FormatDiagnostic(warning));
@@ -65,9 +67,9 @@ public static class GenerateCommandHandler
                 return 1;
             }
 
-            var artifacts = CreateArtifacts(selectedDiagrams, renderMode);
+            var artifacts = CreateArtifacts(selectedDiagrams, renderMode, config, parsedAudience);
 
-            var result = DashboardGenerator.WriteArtifactsAndBuild(resolvedOutputDirectory, artifacts);
+            var result = DashboardGenerator.WriteArtifactsAndBuild(resolvedOutputDirectory, artifacts, parsedAudience);
 
             context.Info($"Generated {result.DiagramCount} diagram(s) in {Path.GetFullPath(resolvedOutputDirectory)}.");
             context.Info($"Dashboard ready at {result.DashboardPath}");
@@ -96,21 +98,31 @@ public static class GenerateCommandHandler
 
     internal static IReadOnlyList<GeneratedDiagramArtifact> CreateArtifacts(
         IReadOnlyList<DurableDoc.Domain.WorkflowDiagram> diagrams,
-        MermaidRenderMode renderMode)
+        MermaidRenderMode renderMode,
+        DurableDocConfig? config,
+        DashboardAudience audience)
     {
         var generatedAt = DateTimeOffset.UtcNow;
         return diagrams.Select(diagram =>
         {
             var renderedDiagram = MermaidRenderer.Prepare(diagram, renderMode).ToDeterministic();
+            var metadata = ResolveMetadata(config, diagram.OrchestratorName);
             return new GeneratedDiagramArtifact
             {
                 DiagramId = renderedDiagram.Id,
                 OrchestratorName = renderedDiagram.OrchestratorName,
                 Mode = renderMode.ToString().ToLowerInvariant(),
+                Audience = FormatAudience(audience),
                 GeneratedAt = generatedAt,
                 Mermaid = MermaidRenderer.Render(renderedDiagram),
                 SourceFile = renderedDiagram.SourceFile,
                 SourceProjectPath = renderedDiagram.SourceProjectPath,
+                BusinessName = metadata?.BusinessName,
+                Capability = metadata?.Capability,
+                Summary = metadata?.Summary,
+                AudienceNotes = metadata?.AudienceNotes,
+                Outcomes = (metadata?.Outcomes ?? []).Where(value => !string.IsNullOrWhiteSpace(value)).ToArray(),
+                OrchestratorNotes = metadata?.Notes,
                 Warnings = renderedDiagram.Diagnostics
                     .Where(issue => issue.Severity == DurableDoc.Domain.WorkflowIssueSeverity.Warning)
                     .Select(issue => issue.Message)
@@ -142,11 +154,16 @@ public static class GenerateCommandHandler
         return "mermaid";
     }
 
-    internal static string ResolveOutputDirectory(string? outputDirectory, DurableDocConfig config)
+    internal static string ResolveOutputDirectory(string? outputDirectory, DurableDocConfig config, DashboardAudience audience)
     {
         if (!string.IsNullOrWhiteSpace(outputDirectory))
         {
             return outputDirectory;
+        }
+
+        if (audience == DashboardAudience.Stakeholder)
+        {
+            return Path.Combine(Directory.GetCurrentDirectory(), "docs", "stakeholder");
         }
 
         if (!string.IsNullOrWhiteSpace(config.Defaults?.Output))
@@ -157,14 +174,34 @@ public static class GenerateCommandHandler
         return Path.Combine(Directory.GetCurrentDirectory(), "docs", "diagrams");
     }
 
-    internal static MermaidRenderMode ParseMode(string mode)
+    internal static MermaidRenderMode ParseMode(string? mode, DashboardAudience audience)
     {
-        if (Enum.TryParse<MermaidRenderMode>(mode, ignoreCase: true, out var renderMode))
+        var effectiveMode = string.IsNullOrWhiteSpace(mode)
+            ? audience == DashboardAudience.Stakeholder ? "business" : "developer"
+            : mode;
+
+        if (Enum.TryParse<MermaidRenderMode>(effectiveMode, ignoreCase: true, out var renderMode))
         {
             return renderMode;
         }
 
-        throw new ArgumentException($"Unsupported diagram mode '{mode}'. Use 'developer' or 'business'.", nameof(mode));
+        throw new ArgumentException($"Unsupported diagram mode '{effectiveMode}'. Use 'developer' or 'business'.", nameof(mode));
+    }
+
+    internal static DashboardAudience ParseAudience(string? audience)
+    {
+        var effectiveAudience = string.IsNullOrWhiteSpace(audience) ? "developer" : audience;
+        if (Enum.TryParse<DashboardAudience>(effectiveAudience, ignoreCase: true, out var parsedAudience))
+        {
+            return parsedAudience;
+        }
+
+        throw new ArgumentException($"Unsupported audience '{effectiveAudience}'. Use 'developer' or 'stakeholder'.", nameof(audience));
+    }
+
+    internal static string FormatAudience(DashboardAudience audience)
+    {
+        return audience.ToString().ToLowerInvariant();
     }
 
     private static string FormatDiagnostic(CliDiagnostic diagnostic)
@@ -188,6 +225,12 @@ public static class GenerateCommandHandler
         }
 
         return builder.ToString();
+    }
+
+    private static OrchestratorMetadata? ResolveMetadata(DurableDocConfig? config, string orchestratorName)
+    {
+        return config?.BusinessView?.Orchestrators?
+            .FirstOrDefault(entry => string.Equals(entry.Name, orchestratorName, StringComparison.OrdinalIgnoreCase));
     }
 
 }

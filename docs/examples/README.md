@@ -14,13 +14,16 @@ Generate diagrams and rebuild the dashboard:
 ```bash
 durable-doc generate --input ./samples/DurableDoc.Sample.Advanced/DurableDoc.Sample.Advanced.csproj --mode developer --format mermaid --output ./docs/examples/output
 durable-doc generate --input ./samples/DurableDoc.Sample.Advanced/DurableDoc.Sample.Advanced.csproj --mode business --format mermaid --output ./docs/examples/output
+durable-doc generate --input ./samples/DurableDoc.Sample.Advanced/DurableDoc.Sample.Advanced.csproj --audience stakeholder --output ./docs/examples/stakeholder
 durable-doc dashboard --input ./docs/examples/output
+durable-doc dashboard --input ./docs/examples/stakeholder --audience stakeholder
 ```
 
 Validate with strict warnings:
 
 ```bash
 durable-doc validate --input ./samples/DurableDoc.Sample.Advanced/DurableDoc.Sample.Advanced.csproj --strict
+durable-doc validate --input ./samples/DurableDoc.Sample.Advanced/DurableDoc.Sample.Advanced.csproj --audience stakeholder
 ```
 
 Repack and reinstall the global tool after local changes:

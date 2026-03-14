@@ -6,7 +6,8 @@ internal static class DashboardHtmlTemplate
         string payload,
         string mermaidBundleFileName,
         string dashboardCssFileName,
-        string dashboardScriptFileName)
+        string dashboardScriptFileName,
+        string audience)
     {
         return """
 <!DOCTYPE html>
@@ -17,22 +18,22 @@ internal static class DashboardHtmlTemplate
   <title>durable-doc dashboard</title>
   <link rel="stylesheet" href="__DASHBOARD_CSS__">
 </head>
-<body>
+<body data-audience="__AUDIENCE__">
   <div class="app-shell">
     <aside class="sidebar">
       <section class="panel brand">
-        <p class="eyebrow">Workflow Explorer</p>
-        <h1>durable-doc</h1>
-        <p class="lede">Read the flow in order, switch views quickly, and keep your place while localhost refreshes.</p>
+        <p id="brand-eyebrow" class="eyebrow">Workflow Explorer</p>
+        <h1 id="brand-title">durable-doc</h1>
+        <p id="brand-lede" class="lede">Read the flow in order, switch views quickly, and keep your place while localhost refreshes.</p>
       </section>
 
       <section class="panel controls">
         <label class="field" for="orchestrator-filter">
-          <span>Filter orchestrators</span>
+          <span id="orchestrator-filter-label">Filter orchestrators</span>
           <input id="orchestrator-filter" type="search" placeholder="Search by orchestrator name">
         </label>
-        <label class="field" for="mode-filter">
-          <span>Availability</span>
+        <label id="mode-filter-field" class="field" for="mode-filter">
+          <span id="mode-filter-label">Availability</span>
           <select id="mode-filter">
             <option value="">All mode availability</option>
             <option value="developer">Has developer view</option>
@@ -40,12 +41,12 @@ internal static class DashboardHtmlTemplate
             <option value="both">Has both views</option>
           </select>
         </label>
-        <p class="hint">Use Up and Down to move between orchestrators, Left and Right to switch modes, and <code>/</code> to focus step search.</p>
+        <p id="controls-hint" class="hint">Use Up and Down to move between orchestrators, Left and Right to switch modes, and <code>/</code> to focus step search.</p>
       </section>
 
       <section class="panel results-panel">
         <div class="section-heading">
-          <h2>Orchestrators</h2>
+          <h2 id="results-heading">Orchestrators</h2>
           <span id="result-count" class="count">0 total</span>
         </div>
         <div id="results" class="results"></div>
@@ -62,18 +63,18 @@ internal static class DashboardHtmlTemplate
           <div class="stage-actions">
             <div id="mode-switcher" class="mode-switcher"></div>
             <button id="toggle-stage" class="panel-toggle" type="button" aria-pressed="false">Collapse stage</button>
-            <button id="compare-toggle" class="compare-toggle" type="button">Compare views</button>
-            <div id="refresh-indicator" class="refresh-indicator">Static snapshot</div>
+            <button id="compare-toggle" class="compare-toggle technical-only" type="button">Compare views</button>
+            <div id="refresh-indicator" class="refresh-indicator technical-only">Static snapshot</div>
           </div>
         </div>
 
-        <p class="hint">The diagram view prioritizes execution order. Click a step to trace what comes before and after it. Localhost preview keeps polling for regenerated artifacts.</p>
+        <p id="stage-hint" class="hint">The diagram view prioritizes execution order. Click a step to trace what comes before and after it. Localhost preview keeps polling for regenerated artifacts.</p>
 
         <div id="summary-cards" class="summary-grid"></div>
 
         <div class="toolbar">
           <label class="field field-grow" for="node-search">
-            <span>Jump to step</span>
+            <span id="node-search-label">Jump to step</span>
             <input id="node-search" type="search" placeholder="Find step, event, timer, or branch label">
           </label>
           <div class="toolbar-actions">
@@ -92,21 +93,22 @@ internal static class DashboardHtmlTemplate
 
       <aside class="panel inspector">
         <section class="inspector-section">
-          <h3>Workflow details</h3>
+          <h3 id="details-heading">Workflow details</h3>
+          <div id="stakeholder-overview" class="stakeholder-overview"></div>
           <div id="details" class="details-grid"></div>
         </section>
 
         <section class="inspector-section">
-          <h3>Selected step</h3>
+          <h3 id="node-details-heading">Selected step</h3>
           <div id="node-details" class="node-details empty">Select a step to inspect its incoming and outgoing flow.</div>
         </section>
 
-        <section class="inspector-section">
-          <h3>Warnings</h3>
+        <section class="inspector-section technical-only">
+          <h3 id="warnings-heading">Warnings</h3>
           <ul id="warnings" class="warnings"></ul>
         </section>
 
-        <details class="source-panel">
+        <details id="source-panel" class="source-panel technical-only">
           <summary>Mermaid source</summary>
           <pre id="source" class="source"></pre>
         </details>
@@ -123,7 +125,8 @@ internal static class DashboardHtmlTemplate
             .Replace("__PAYLOAD__", payload, StringComparison.Ordinal)
             .Replace("__MERMAID_BUNDLE__", mermaidBundleFileName, StringComparison.Ordinal)
             .Replace("__DASHBOARD_CSS__", dashboardCssFileName, StringComparison.Ordinal)
-            .Replace("__DASHBOARD_SCRIPT__", dashboardScriptFileName, StringComparison.Ordinal);
+            .Replace("__DASHBOARD_SCRIPT__", dashboardScriptFileName, StringComparison.Ordinal)
+            .Replace("__AUDIENCE__", audience, StringComparison.Ordinal);
     }
 }
 
@@ -320,6 +323,24 @@ select {
   gap: 10px;
   max-height: calc(100vh - 340px);
   overflow: auto;
+}
+
+.result-group {
+  display: grid;
+  gap: 10px;
+}
+
+.result-group + .result-group {
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.result-group-title {
+  margin: 0;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent-strong);
 }
 
 .result {
@@ -780,6 +801,38 @@ select {
   word-break: break-word;
 }
 
+.stakeholder-overview {
+  display: grid;
+  gap: 10px;
+}
+
+.stakeholder-card {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(216, 243, 239, 0.55) 100%);
+  padding: 14px;
+}
+
+.stakeholder-card strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent-strong);
+}
+
+.stakeholder-card p {
+  line-height: 1.5;
+}
+
+.stakeholder-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+}
+
 .warnings {
   list-style: none;
   margin: 0;
@@ -828,6 +881,13 @@ select {
   overflow: auto;
   font-family: "SFMono-Regular", Consolas, monospace;
   font-size: 0.9rem;
+}
+
+body[data-audience="stakeholder"] .technical-only,
+body[data-audience="stakeholder"] #mode-filter-field,
+body[data-audience="stakeholder"] #compare-toggle,
+body[data-audience="stakeholder"] #refresh-indicator {
+  display: none !important;
 }
 
 @media (max-width: 1200px) {
@@ -879,11 +939,14 @@ internal static class DashboardScriptTemplate
   const summaryCardsEl = document.getElementById('summary-cards');
   const legendEl = document.getElementById('legend');
   const nodeDetailsEl = document.getElementById('node-details');
+  const stakeholderOverviewEl = document.getElementById('stakeholder-overview');
   const nodeSearchEl = document.getElementById('node-search');
   const nodeSearchStatusEl = document.getElementById('node-search-status');
   const findStepEl = document.getElementById('find-step');
   const startStepEl = document.getElementById('start-step');
   const clearStepEl = document.getElementById('clear-step');
+  const audience = (document.body.getAttribute('data-audience') || 'developer').toLowerCase();
+  const isStakeholderAudience = audience === 'stakeholder';
   const refreshMs = 3000;
 
   const state = {
@@ -904,6 +967,7 @@ internal static class DashboardScriptTemplate
     window.mermaid.initialize({ startOnLoad: false, securityLevel: 'loose' });
   }
 
+  configureAudience();
   hydrate(false);
 
   orchestratorFilterEl.addEventListener('input', applyFilters);
@@ -974,6 +1038,28 @@ internal static class DashboardScriptTemplate
     } catch {
       return [];
     }
+  }
+
+  function configureAudience() {
+    if (!isStakeholderAudience) {
+      return;
+    }
+
+    document.getElementById('brand-eyebrow').textContent = 'Business Flow Library';
+    document.getElementById('brand-title').textContent = 'durable-doc stakeholder view';
+    document.getElementById('brand-lede').textContent = 'Review the flow, stage order, and outcomes without reading the orchestration code.';
+    document.getElementById('orchestrator-filter-label').textContent = 'Filter workflows';
+    orchestratorFilterEl.placeholder = 'Search by workflow or capability';
+    document.getElementById('controls-hint').innerHTML = 'Use Up and Down to move between workflows, and <code>/</code> to focus stage search.';
+    document.getElementById('results-heading').textContent = 'Workflows';
+    document.getElementById('stage-hint').textContent = 'Review the ordered business flow, select a stage to inspect handoffs, and share the static output with non-engineering partners.';
+    document.getElementById('node-search-label').textContent = 'Jump to stage';
+    nodeSearchEl.placeholder = 'Find stage, event, decision, or note';
+    findStepEl.textContent = 'Find stage';
+    startStepEl.textContent = 'First stage';
+    clearStepEl.textContent = 'Clear selection';
+    document.getElementById('details-heading').textContent = 'Workflow summary';
+    document.getElementById('node-details-heading').textContent = 'Selected stage';
   }
 
   function applyUrlState() {
@@ -1071,11 +1157,7 @@ internal static class DashboardScriptTemplate
 
     const selectedGroup = getSelectedGroup();
     if ((!state.selectedMode || !selectedGroup || !hasMode(selectedGroup, state.selectedMode)) && selectedGroup) {
-      state.selectedMode = hasMode(selectedGroup, 'developer')
-        ? 'developer'
-        : selectedGroup.modes[0]
-          ? selectedGroup.modes[0].mode
-          : '';
+      state.selectedMode = getPreferredMode(selectedGroup);
     }
 
     ensureSelectedNode();
@@ -1090,10 +1172,35 @@ internal static class DashboardScriptTemplate
     diagrams.forEach(function (diagram) {
       const existing = grouped.get(diagram.orchestratorName) || {
         orchestratorName: diagram.orchestratorName,
+        businessName: diagram.businessName || '',
+        capability: diagram.capability || '',
+        summary: diagram.summary || '',
+        audienceNotes: diagram.audienceNotes || '',
+        orchestratorNotes: diagram.orchestratorNotes || '',
+        outcomes: diagram.outcomes || [],
         sourceFile: diagram.sourceFile || '',
         sourceProjectPath: diagram.sourceProjectPath || '',
         modes: []
       };
+
+      if (!existing.businessName && diagram.businessName) {
+        existing.businessName = diagram.businessName;
+      }
+      if (!existing.capability && diagram.capability) {
+        existing.capability = diagram.capability;
+      }
+      if (!existing.summary && diagram.summary) {
+        existing.summary = diagram.summary;
+      }
+      if (!existing.audienceNotes && diagram.audienceNotes) {
+        existing.audienceNotes = diagram.audienceNotes;
+      }
+      if (!existing.orchestratorNotes && diagram.orchestratorNotes) {
+        existing.orchestratorNotes = diagram.orchestratorNotes;
+      }
+      if ((!existing.outcomes || existing.outcomes.length === 0) && diagram.outcomes && diagram.outcomes.length > 0) {
+        existing.outcomes = diagram.outcomes;
+      }
 
       const existingMode = existing.modes.find(function (entry) { return entry.mode === diagram.mode; });
       if (!existingMode || new Date(existingMode.generatedAt) < new Date(diagram.generatedAt)) {
@@ -1137,11 +1244,7 @@ internal static class DashboardScriptTemplate
 
     const selectedGroup = getSelectedGroup();
     if (selectedGroup && !hasMode(selectedGroup, state.selectedMode)) {
-      state.selectedMode = hasMode(selectedGroup, 'developer')
-        ? 'developer'
-        : selectedGroup.modes[0]
-          ? selectedGroup.modes[0].mode
-          : '';
+      state.selectedMode = getPreferredMode(selectedGroup);
     }
 
     ensureSelectedNode();
@@ -1174,7 +1277,46 @@ internal static class DashboardScriptTemplate
       return;
     }
 
+    if (isStakeholderAudience) {
+      const capabilityGroups = new Map();
+      state.filtered.forEach(function (group) {
+        const capability = group.capability || 'Uncategorized';
+        if (!capabilityGroups.has(capability)) {
+          capabilityGroups.set(capability, []);
+        }
+
+        capabilityGroups.get(capability).push(group);
+      });
+
+      Array.from(capabilityGroups.keys()).sort(function (left, right) {
+        return left.localeCompare(right);
+      }).forEach(function (capability) {
+        const section = document.createElement('section');
+        section.className = 'result-group';
+
+        const heading = document.createElement('h3');
+        heading.className = 'result-group-title';
+        heading.textContent = capability;
+        section.appendChild(heading);
+
+        capabilityGroups.get(capability).sort(function (left, right) {
+          return getGroupTitle(left).localeCompare(getGroupTitle(right));
+        }).forEach(function (group) {
+          section.appendChild(renderResultButton(group));
+        });
+
+        resultsEl.appendChild(section);
+      });
+
+      return;
+    }
+
     state.filtered.forEach(function (group) {
+      resultsEl.appendChild(renderResultButton(group));
+    });
+  }
+
+  function renderResultButton(group) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'result';
@@ -1188,15 +1330,15 @@ internal static class DashboardScriptTemplate
 
       button.innerHTML =
         '<div class="result-title">' +
-          '<strong>' + escapeHtml(group.orchestratorName) + '</strong>' +
+          '<strong>' + escapeHtml(getGroupTitle(group)) + '</strong>' +
           '<div class="mode-pill-list">' + modes + '</div>' +
         '</div>' +
-        '<div class="meta">' + escapeHtml(group.sourceProjectPath || group.sourceFile || 'Source unknown') + '</div>';
+        '<div class="meta">' + escapeHtml(getGroupMeta(group)) + '</div>';
 
       button.addEventListener('click', function () {
         state.selectedOrchestrator = group.orchestratorName;
         if (!hasMode(group, state.selectedMode)) {
-          state.selectedMode = hasMode(group, 'developer') ? 'developer' : group.modes[0].mode;
+          state.selectedMode = getPreferredMode(group);
         }
         ensureSelectedNode();
         renderResults();
@@ -1204,8 +1346,7 @@ internal static class DashboardScriptTemplate
         writeUrlState('push');
       });
 
-      resultsEl.appendChild(button);
-    });
+      return button;
   }
 
   function renderSelection() {
@@ -1220,6 +1361,7 @@ internal static class DashboardScriptTemplate
       diagramGridEl.classList.remove('compare');
       diagramGridEl.innerHTML = '<div class="empty">Choose an orchestrator to inspect its generated diagrams.</div>';
       detailsEl.innerHTML = '';
+      stakeholderOverviewEl.innerHTML = '';
       warningsEl.innerHTML = '';
       sourceEl.textContent = '';
       modeSwitcherEl.innerHTML = '';
@@ -1239,8 +1381,10 @@ internal static class DashboardScriptTemplate
       state.compareMode = false;
     }
 
-    modeEl.textContent = selected.mode + ' view';
-    titleEl.textContent = group.orchestratorName;
+    modeEl.textContent = isStakeholderAudience
+      ? (selected.mode === 'business' ? 'Business flow' : 'Workflow view')
+      : selected.mode + ' view';
+    titleEl.textContent = getGroupTitle(group);
     renderModeSwitcher(group);
     renderSummary(selected);
     renderLegend(selected);
@@ -1251,6 +1395,11 @@ internal static class DashboardScriptTemplate
   }
 
   function renderModeSwitcher(group) {
+    if (isStakeholderAudience) {
+      modeSwitcherEl.innerHTML = '';
+      return;
+    }
+
     modeSwitcherEl.innerHTML = '';
 
     group.modes.forEach(function (entry) {
@@ -1275,6 +1424,21 @@ internal static class DashboardScriptTemplate
 
   function renderSummary(selected) {
     const graph = buildGraph(selected);
+    if (isStakeholderAudience) {
+      const summary = [
+        ['Capability', selected.capability || 'Uncategorized'],
+        ['Stages', String(graph.nodes.length)],
+        ['Outcomes', String((selected.outcomes || []).length)],
+        ['Flow shape', describeFlowShape(graph)],
+        ['Updated', new Date(selected.generatedAt).toLocaleDateString()]
+      ];
+
+      summaryCardsEl.innerHTML = summary.map(function (entry) {
+        return '<div class="summary-card"><strong>' + escapeHtml(entry[0]) + '</strong><span>' + escapeHtml(entry[1]) + '</span></div>';
+      }).join('');
+      return;
+    }
+
     const branchCount = countBranchNodes(graph);
     const warningsCount = (selected.warnings || []).length;
     const summary = [
@@ -1305,6 +1469,46 @@ internal static class DashboardScriptTemplate
   function renderInspector(selected) {
     const graph = buildGraph(selected);
     const selectedNode = state.selectedNodeId ? graph.byId[state.selectedNodeId] : null;
+
+    if (isStakeholderAudience) {
+      stakeholderOverviewEl.innerHTML = renderStakeholderOverview(selected);
+
+      const details = [
+        ['Capability', selected.capability || 'Uncategorized'],
+        ['Updated', new Date(selected.generatedAt).toLocaleString()],
+        ['Stage order', graph.nodes.map(function (node) { return node.displayLabel || node.name || node.id; }).join(' -> ')]
+      ];
+
+      detailsEl.innerHTML = details.map(function (entry) {
+        return '<div class="detail"><strong>' + escapeHtml(entry[0]) + '</strong><div class="detail-value">' + escapeHtml(entry[1]) + '</div></div>';
+      }).join('');
+
+      warningsEl.innerHTML = '';
+
+      if (!selectedNode) {
+        nodeDetailsEl.className = 'node-details empty';
+        nodeDetailsEl.textContent = 'Select a stage to inspect what leads into it and what follows.';
+        return;
+      }
+
+      const incoming = (graph.incoming[selectedNode.id] || []).map(function (edge) {
+        return describeEdge(graph, edge, 'from');
+      });
+      const outgoing = (graph.outgoing[selectedNode.id] || []).map(function (edge) {
+        return describeEdge(graph, edge, 'to');
+      });
+
+      nodeDetailsEl.className = 'node-details';
+      nodeDetailsEl.innerHTML =
+        '<div class="node-panel"><strong>Stage</strong><div class="detail-value">' + escapeHtml(selectedNode.displayLabel || selectedNode.name || selectedNode.id) + '</div></div>' +
+        '<div class="node-panel"><strong>Type</strong><div class="detail-value">' + escapeHtml(formatNodeType(selectedNode.nodeType)) + '</div></div>' +
+        '<div class="node-panel"><strong>Notes</strong><div class="detail-value">' + escapeHtml(selectedNode.notes || 'No notes provided.') + '</div></div>' +
+        '<div class="node-panel"><strong>What leads here</strong><div class="node-list">' + renderNodeList(incoming, 'Start of workflow') + '</div></div>' +
+        '<div class="node-panel"><strong>What follows</strong><div class="node-list">' + renderNodeList(outgoing, 'End of workflow') + '</div></div>';
+      return;
+    }
+
+    stakeholderOverviewEl.innerHTML = '';
 
     const details = [
       ['Generated', new Date(selected.generatedAt).toLocaleString()],
@@ -1346,9 +1550,9 @@ internal static class DashboardScriptTemplate
   }
 
   function renderDiagrams(group, selected) {
-    diagramGridEl.classList.toggle('compare', state.compareMode);
+    diagramGridEl.classList.toggle('compare', state.compareMode && !isStakeholderAudience);
 
-    const visible = state.compareMode
+    const visible = state.compareMode && !isStakeholderAudience
       ? ['developer', 'business'].map(function (mode) { return getMode(group, mode); }).filter(Boolean)
       : [selected];
 
@@ -1356,10 +1560,13 @@ internal static class DashboardScriptTemplate
     visible.forEach(function (artifact) {
       const card = document.createElement('article');
       card.className = 'diagram-card';
+      const cardTitle = isStakeholderAudience
+        ? (artifact.mode === 'business' ? 'Business flow' : 'Workflow view')
+        : (artifact.mode === 'developer' ? 'Developer view' : 'Business view');
       card.innerHTML =
         '<div class="diagram-card-header">' +
           '<div>' +
-            '<h3 class="diagram-card-title">' + escapeHtml(artifact.mode === 'developer' ? 'Developer view' : 'Business view') + '</h3>' +
+            '<h3 class="diagram-card-title">' + escapeHtml(cardTitle) + '</h3>' +
             '<div class="diagram-meta">' + escapeHtml(describeFlowShape(buildGraph(artifact))) + ' · ' + escapeHtml(new Date(artifact.generatedAt).toLocaleString()) + '</div>' +
           '</div>' +
           '<span class="pill">' + escapeHtml(artifact.mode) + '</span>' +
@@ -1417,14 +1624,14 @@ internal static class DashboardScriptTemplate
             '<span class="step-index">' + escapeHtml(String(index + 1)) + '</span>' +
             '<div>' +
               '<div class="step-title">' + escapeHtml(node.displayLabel || node.name || node.id) + '</div>' +
-              '<div class="step-meta">' + escapeHtml(node.name && node.name !== node.displayLabel ? node.name : '') + '</div>' +
+              '<div class="step-meta">' + escapeHtml(describeSecondaryStepMeta(node)) + '</div>' +
             '</div>' +
           '</div>' +
           '<span class="step-type" data-kind="' + escapeHtml(String(node.nodeType || '').toLowerCase()) + '">' + escapeHtml(formatNodeType(node.nodeType)) + '</span>' +
         '</div>' +
         '<div class="step-subheading">' +
           '<span class="step-note">' + escapeHtml(describeConnectivity(incoming.length, outgoing.length, index === 0, index === graph.nodes.length - 1)) + '</span>' +
-          '<span class="step-meta">' + escapeHtml(node.lineNumber ? 'Line ' + node.lineNumber : 'Line unknown') + '</span>' +
+          '<span class="step-meta">' + escapeHtml(describeTertiaryStepMeta(node)) + '</span>' +
         '</div>' +
         '<div class="edge-list">' + renderEdgeChips(graph, outgoing) + '</div>';
 
@@ -1469,10 +1676,10 @@ internal static class DashboardScriptTemplate
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
       moveOrchestratorSelection(-1);
-    } else if (event.key === 'ArrowRight') {
+    } else if (!isStakeholderAudience && event.key === 'ArrowRight') {
       event.preventDefault();
       moveModeSelection(1);
-    } else if (event.key === 'ArrowLeft') {
+    } else if (!isStakeholderAudience && event.key === 'ArrowLeft') {
       event.preventDefault();
       moveModeSelection(-1);
     }
@@ -1554,7 +1761,9 @@ internal static class DashboardScriptTemplate
   function updateNodeSearchStatus(selected) {
     const query = nodeSearchEl.value.trim().toLowerCase();
     if (!query) {
-      nodeSearchStatusEl.textContent = 'Search within the current diagram to jump directly to a step.';
+      nodeSearchStatusEl.textContent = isStakeholderAudience
+        ? 'Search within the current flow to jump directly to a stage.'
+        : 'Search within the current diagram to jump directly to a step.';
       return;
     }
 
@@ -1563,10 +1772,10 @@ internal static class DashboardScriptTemplate
     });
 
     nodeSearchStatusEl.textContent = matches.length === 0
-      ? 'No matching steps in this view.'
+      ? (isStakeholderAudience ? 'No matching stages in this view.' : 'No matching steps in this view.')
       : matches.length === 1
-        ? '1 matching step. Press Enter to jump.'
-        : matches.length + ' matching steps. Press Enter to jump to the first.';
+        ? (isStakeholderAudience ? '1 matching stage. Press Enter to jump.' : '1 matching step. Press Enter to jump.')
+        : matches.length + (isStakeholderAudience ? ' matching stages. Press Enter to jump to the first.' : ' matching steps. Press Enter to jump to the first.');
   }
 
   function buildGraph(artifact) {
@@ -1714,6 +1923,70 @@ internal static class DashboardScriptTemplate
     }).join('');
   }
 
+  function renderStakeholderOverview(selected) {
+    const cards = [];
+
+    if (selected.summary) {
+      cards.push(
+        '<div class="stakeholder-card"><strong>Summary</strong><p>' + escapeHtml(selected.summary) + '</p></div>'
+      );
+    }
+
+    const outcomes = selected.outcomes || [];
+    if (outcomes.length > 0) {
+      cards.push(
+        '<div class="stakeholder-card"><strong>Outcomes</strong><ul class="stakeholder-list">' +
+          outcomes.map(function (outcome) { return '<li>' + escapeHtml(outcome) + '</li>'; }).join('') +
+        '</ul></div>'
+      );
+    }
+
+    const notes = selected.audienceNotes || selected.orchestratorNotes;
+    if (notes) {
+      cards.push(
+        '<div class="stakeholder-card"><strong>Notes</strong><p>' + escapeHtml(notes) + '</p></div>'
+      );
+    }
+
+    if (cards.length === 0) {
+      cards.push(
+        '<div class="stakeholder-card"><strong>Summary</strong><p>No stakeholder summary metadata is configured for this workflow yet.</p></div>'
+      );
+    }
+
+    return cards.join('');
+  }
+
+  function describeSecondaryStepMeta(node) {
+    if (isStakeholderAudience) {
+      return node.notes || '';
+    }
+
+    return node.name && node.name !== node.displayLabel ? node.name : '';
+  }
+
+  function describeTertiaryStepMeta(node) {
+    if (isStakeholderAudience) {
+      return node.businessGroup || '';
+    }
+
+    return node.lineNumber ? 'Line ' + node.lineNumber : 'Line unknown';
+  }
+
+  function getGroupTitle(group) {
+    return isStakeholderAudience
+      ? (group.businessName || group.orchestratorName)
+      : group.orchestratorName;
+  }
+
+  function getGroupMeta(group) {
+    if (isStakeholderAudience) {
+      return group.summary || group.orchestratorNotes || group.orchestratorName;
+    }
+
+    return group.sourceProjectPath || group.sourceFile || 'Source unknown';
+  }
+
   function getSelectedGroup() {
     return state.filtered.find(function (group) {
       return group.orchestratorName === state.selectedOrchestrator;
@@ -1733,6 +2006,18 @@ internal static class DashboardScriptTemplate
 
   function hasMode(group, mode) {
     return !!getMode(group, mode);
+  }
+
+  function getPreferredMode(group) {
+    if (isStakeholderAudience && hasMode(group, 'business')) {
+      return 'business';
+    }
+
+    return hasMode(group, 'developer')
+      ? 'developer'
+      : group.modes[0]
+        ? group.modes[0].mode
+        : '';
   }
 
   function getStartNode(artifact) {

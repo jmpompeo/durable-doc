@@ -10,6 +10,13 @@ public sealed class GeneratedDiagramArtifact
     public string DiagramId { get; init; } = string.Empty;
     public string OrchestratorName { get; init; } = string.Empty;
     public string Mode { get; init; } = string.Empty;
+    public string Audience { get; init; } = "developer";
+    public string? BusinessName { get; init; }
+    public string? Capability { get; init; }
+    public string? Summary { get; init; }
+    public string? AudienceNotes { get; init; }
+    public IReadOnlyList<string> Outcomes { get; init; } = [];
+    public string? OrchestratorNotes { get; init; }
     public DateTimeOffset GeneratedAt { get; init; }
     public string Mermaid { get; init; } = string.Empty;
     public string MermaidFileName { get; init; } = string.Empty;
@@ -31,7 +38,10 @@ public static class DashboardGenerator
     internal const string DashboardScriptFileName = "dashboard.js";
     internal const string DashboardDataFileName = "dashboard-data.json";
 
-    public static DashboardBuildResult WriteArtifactsAndBuild(string outputDirectory, IEnumerable<GeneratedDiagramArtifact> diagrams)
+    public static DashboardBuildResult WriteArtifactsAndBuild(
+        string outputDirectory,
+        IEnumerable<GeneratedDiagramArtifact> diagrams,
+        DashboardAudience? audience = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(outputDirectory);
 
@@ -55,7 +65,7 @@ public static class DashboardGenerator
             DiagramArtifactStore.Write(outputPath, diagram);
         }
 
-        return WriteDashboard(outputPath, materialized);
+        return WriteDashboard(outputPath, materialized, audience);
     }
 
     public static IReadOnlyList<GeneratedDiagramArtifact> ReadArtifacts(string inputDirectory)
@@ -77,14 +87,17 @@ public static class DashboardGenerator
         return diagrams;
     }
 
-    public static DashboardBuildResult BuildFromArtifacts(string inputDirectory)
+    public static DashboardBuildResult BuildFromArtifacts(string inputDirectory, DashboardAudience? audience = null)
     {
         var inputPath = Path.GetFullPath(inputDirectory);
         var diagrams = ReadArtifacts(inputPath);
-        return WriteDashboard(inputPath, diagrams);
+        return WriteDashboard(inputPath, diagrams, audience);
     }
 
-    public static DashboardBuildResult BuildDashboard(string outputDirectory, IEnumerable<GeneratedDiagramArtifact> diagrams)
+    public static DashboardBuildResult BuildDashboard(
+        string outputDirectory,
+        IEnumerable<GeneratedDiagramArtifact> diagrams,
+        DashboardAudience? audience = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(outputDirectory);
         var outputPath = Path.GetFullPath(outputDirectory);
@@ -98,12 +111,16 @@ public static class DashboardGenerator
             throw new InvalidOperationException("No diagrams were provided for dashboard generation.");
         }
 
-        return WriteDashboard(outputPath, materialized);
+        return WriteDashboard(outputPath, materialized, audience);
     }
 
-    private static DashboardBuildResult WriteDashboard(string outputDirectory, IReadOnlyList<GeneratedDiagramArtifact> diagrams)
+    private static DashboardBuildResult WriteDashboard(
+        string outputDirectory,
+        IReadOnlyList<GeneratedDiagramArtifact> diagrams,
+        DashboardAudience? audience)
     {
         var payload = SerializeDashboardData(diagrams);
+        var resolvedAudience = ResolveAudience(diagrams, audience);
 
         File.WriteAllText(Path.Combine(outputDirectory, MermaidBundleFileName), MermaidCompatibilityBundle.Render());
         File.WriteAllText(Path.Combine(outputDirectory, DashboardCssFileName), DashboardCssTemplate.Render());
@@ -117,7 +134,8 @@ public static class DashboardGenerator
                 payload,
                 MermaidBundleFileName,
                 DashboardCssFileName,
-                DashboardScriptFileName));
+                DashboardScriptFileName,
+                resolvedAudience.ToString().ToLowerInvariant()));
 
         return new DashboardBuildResult(dashboardPath, diagrams.Count);
     }
@@ -126,6 +144,30 @@ public static class DashboardGenerator
     {
         return JsonSerializer.Serialize(diagrams, DashboardJson.SerializerOptions)
             .Replace("</", "<\\/", StringComparison.Ordinal);
+    }
+
+    private static DashboardAudience ResolveAudience(
+        IReadOnlyList<GeneratedDiagramArtifact> diagrams,
+        DashboardAudience? audienceOverride)
+    {
+        if (audienceOverride is not null)
+        {
+            return audienceOverride.Value;
+        }
+
+        var audiences = diagrams
+            .Select(diagram => diagram.Audience)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (audiences.Length == 1 &&
+            Enum.TryParse<DashboardAudience>(audiences[0], ignoreCase: true, out var parsedAudience))
+        {
+            return parsedAudience;
+        }
+
+        return DashboardAudience.Developer;
     }
 }
 
@@ -141,6 +183,13 @@ internal static class DiagramArtifactStore
             DiagramId = artifact.DiagramId,
             OrchestratorName = artifact.OrchestratorName,
             Mode = artifact.Mode,
+            Audience = artifact.Audience,
+            BusinessName = artifact.BusinessName,
+            Capability = artifact.Capability,
+            Summary = artifact.Summary,
+            AudienceNotes = artifact.AudienceNotes,
+            Outcomes = artifact.Outcomes,
+            OrchestratorNotes = artifact.OrchestratorNotes,
             GeneratedAt = artifact.GeneratedAt,
             Mermaid = artifact.Mermaid,
             MermaidFileName = mermaidFileName,
@@ -218,6 +267,7 @@ internal static class DiagramArtifactStore
         var normalized = builder.ToString().Trim('-');
         return string.IsNullOrWhiteSpace(normalized) ? "diagram" : normalized;
     }
+
 }
 
 internal static class DashboardJson
