@@ -56,6 +56,14 @@ public static class DurableDocConfigValidator
                 errors.Add("Business view orchestrator metadata requires 'name'.");
             }
 
+            foreach (var outcome in orchestrator.Outcomes ?? [])
+            {
+                if (string.IsNullOrWhiteSpace(outcome))
+                {
+                    errors.Add($"Business view outcomes for orchestrator '{orchestrator.Name}' cannot be blank.");
+                }
+            }
+
             var steps = orchestrator.Steps ?? [];
             var duplicateSteps = steps
                 .Where(step => !string.IsNullOrWhiteSpace(step.Name))

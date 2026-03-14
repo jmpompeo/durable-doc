@@ -29,8 +29,17 @@ jobs:
       - name: Generate business diagrams
         run: dotnet run --project ./src/DurableDoc.Cli -- generate --input ./samples/DurableDoc.Sample.Advanced/DurableDoc.Sample.Advanced.csproj --mode business --format mermaid --output ./docs/diagrams
 
+      - name: Generate stakeholder dashboard
+        run: dotnet run --project ./src/DurableDoc.Cli -- generate --input ./samples/DurableDoc.Sample.Advanced/DurableDoc.Sample.Advanced.csproj --audience stakeholder --output ./docs/stakeholder
+
       - name: Upload generated diagrams
         uses: actions/upload-artifact@v4
         with:
           name: durable-doc-diagrams
           path: docs/diagrams
+
+      - name: Upload stakeholder dashboard
+        uses: actions/upload-artifact@v4
+        with:
+          name: durable-doc-stakeholder
+          path: docs/stakeholder

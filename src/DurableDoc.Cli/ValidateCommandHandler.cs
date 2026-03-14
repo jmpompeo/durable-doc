@@ -8,6 +8,7 @@ public static class ValidateCommandHandler
     public static async Task<int> ExecuteAsync(
         string inputPath,
         string? orchestratorName = null,
+        string audience = "developer",
         string? configPath = null,
         bool strict = false,
         CliCommandContext? context = null,
@@ -38,7 +39,7 @@ public static class ValidateCommandHandler
                 return 1;
             }
 
-            var diagnostics = CliDiagnostics.Evaluate(diagrams, config);
+            var diagnostics = CliDiagnostics.Evaluate(diagrams, config, GenerateCommandHandler.ParseAudience(audience));
 
             foreach (var warning in diagnostics.Where(d => d.Severity == CliDiagnosticSeverity.Warning))
             {
