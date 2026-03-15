@@ -3,6 +3,15 @@ name: diagram-validation
 on:
   pull_request:
   workflow_dispatch:
+    inputs:
+      publish_demo_site:
+        description: 'Publish the packaged stakeholder dashboard to GitHub Pages for demo purposes'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
 
 jobs:
   validate-and-generate:
@@ -32,6 +41,29 @@ jobs:
       - name: Generate stakeholder dashboard
         run: dotnet run --project ./src/DurableDoc.Cli -- generate --input ./samples/DurableDoc.Sample.Advanced/DurableDoc.Sample.Advanced.csproj --audience stakeholder --output ./docs/stakeholder
 
+      - name: Package stakeholder dashboard
+        shell: pwsh
+        run: ./.github/scripts/package_stakeholder_dashboard.ps1 -InputDir ./docs/stakeholder -OutputDir ./artifacts/stakeholder
+
+      - name: Set up Chrome
+        id: setup-chrome
+        uses: browser-actions/setup-chrome@v2
+        with:
+          install-dependencies: true
+
+      - name: Render stakeholder PDF
+        run: >
+          ${{ steps.setup-chrome.outputs.chrome-path }} --headless --disable-gpu --no-sandbox
+          --virtual-time-budget=10000
+          --run-all-compositor-stages-before-draw
+          --print-to-pdf=./artifacts/stakeholder/stakeholder-dashboard.pdf
+          file://${{ github.workspace }}/artifacts/stakeholder/index.html
+
+      - name: Verify stakeholder package
+        run: |
+          test -s ./artifacts/stakeholder/index.html
+          test -s ./artifacts/stakeholder/stakeholder-dashboard.pdf
+
       - name: Upload generated diagrams
         uses: actions/upload-artifact@v4
         with:
@@ -42,4 +74,28 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: durable-doc-stakeholder
-          path: docs/stakeholder
+          path: artifacts/stakeholder
+
+      - name: Upload demo Pages artifact
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish_demo_site == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: artifacts/stakeholder
+
+  deploy-demo-pages:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish_demo_site == 'true'
+    needs: validate-and-generate
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Deploy demo site
+        id: deployment
+        uses: actions/deploy-pages@v4

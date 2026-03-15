@@ -9,6 +9,14 @@ internal static class DashboardHtmlTemplate
         string dashboardScriptFileName,
         string audience)
     {
+        var isStakeholderAudience = string.Equals(audience, "stakeholder", StringComparison.OrdinalIgnoreCase);
+        var brandLede = isStakeholderAudience
+            ? "Read the flow in order, switch views quickly, and share a simple snapshot of each workflow."
+            : "Read the flow in order, switch views quickly, and keep your place while localhost refreshes.";
+        var stageHint = isStakeholderAudience
+            ? "The diagram view prioritizes execution order. Click a step to trace what comes before and after it."
+            : "The diagram view prioritizes execution order. Click a step to trace what comes before and after it. Localhost preview keeps polling for regenerated artifacts.";
+
         return """
 <!DOCTYPE html>
 <html lang="en">
@@ -24,7 +32,7 @@ internal static class DashboardHtmlTemplate
       <section class="panel brand">
         <p id="brand-eyebrow" class="eyebrow">Workflow Explorer</p>
         <h1 id="brand-title">durable-doc</h1>
-        <p id="brand-lede" class="lede">Read the flow in order, switch views quickly, and keep your place while localhost refreshes.</p>
+        <p id="brand-lede" class="lede">__BRAND_LEDE__</p>
       </section>
 
       <section class="panel controls">
@@ -68,7 +76,7 @@ internal static class DashboardHtmlTemplate
           </div>
         </div>
 
-        <p id="stage-hint" class="hint">The diagram view prioritizes execution order. Click a step to trace what comes before and after it. Localhost preview keeps polling for regenerated artifacts.</p>
+        <p id="stage-hint" class="hint">__STAGE_HINT__</p>
 
         <div id="summary-cards" class="summary-grid"></div>
 
@@ -126,6 +134,8 @@ internal static class DashboardHtmlTemplate
             .Replace("__MERMAID_BUNDLE__", mermaidBundleFileName, StringComparison.Ordinal)
             .Replace("__DASHBOARD_CSS__", dashboardCssFileName, StringComparison.Ordinal)
             .Replace("__DASHBOARD_SCRIPT__", dashboardScriptFileName, StringComparison.Ordinal)
+            .Replace("__BRAND_LEDE__", brandLede, StringComparison.Ordinal)
+            .Replace("__STAGE_HINT__", stageHint, StringComparison.Ordinal)
             .Replace("__AUDIENCE__", audience, StringComparison.Ordinal);
     }
 }

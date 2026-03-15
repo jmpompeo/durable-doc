@@ -19,6 +19,21 @@ durable-doc dashboard --input ./docs/examples/output
 durable-doc dashboard --input ./docs/examples/stakeholder --audience stakeholder
 ```
 
+Stakeholder delivery stays intentionally simple:
+
+- CI packages the stakeholder view into one standalone `index.html` plus a PDF snapshot.
+- Hosted demos can reuse that same packaged HTML when needed.
+- Workflow artifacts are a fallback download path, not the primary stakeholder experience.
+- Production internal hosting is deferred until there is adoption demand.
+
+Run the same stakeholder packaging flow locally:
+
+```bash
+bash ./scripts/run_stakeholder_pipeline.sh
+```
+
+Set `PWSH_BIN` or `CHROME_BIN` if PowerShell or Chrome/Chromium are not on the default path for your machine.
+
 Validate with strict warnings:
 
 ```bash

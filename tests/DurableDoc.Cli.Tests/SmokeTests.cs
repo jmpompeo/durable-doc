@@ -865,6 +865,8 @@ public class Demo
         Assert.Contains("data-audience=\"stakeholder\"", dashboard, StringComparison.Ordinal);
         Assert.Contains("stakeholder-overview", dashboard, StringComparison.Ordinal);
         Assert.Contains("technical-only", dashboard, StringComparison.Ordinal);
+        Assert.DoesNotContain("localhost refreshes", dashboard, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Localhost preview keeps polling for regenerated artifacts.", dashboard, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("body[data-audience=\"stakeholder\"] .technical-only", dashboardCss, StringComparison.Ordinal);
     }
 
