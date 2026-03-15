@@ -30,28 +30,27 @@ public static class GenerateCommandHandler
                 return 1;
             }
 
-            var config = DurableDocConfigLoader.Load(configPath);
             var renderMode = ParseMode(mode);
-            ParseFormat(format, config);
-            var resolvedOutputDirectory = ResolveOutputDirectory(outputDirectory, config);
-            var analyzer = new WorkflowAnalyzer();
-            var analysis = await analyzer.AnalyzeWorkspaceAsync(inputPath, config, cancellationToken).ConfigureAwait(false);
-
-            if (analysis.Diagrams.Count == 0)
+            SourceWorkflowSelection sourceSelection;
+            try
             {
-                context.Fail(BuildNoDiscoveryMessage(analysis, inputPath));
-                return 1;
-            }
-
-            var selectedDiagrams = WorkflowSelection.FilterDiagrams(analysis.Diagrams, orchestratorName);
-
-            if (selectedDiagrams.Length == 0)
-            {
-                context.Fail(WorkflowSelection.BuildFilterMismatchMessage(
+                sourceSelection = await SourceWorkflowLoader.LoadSelectedDiagramsAsync(
+                    inputPath,
+                    outputDirectory,
                     orchestratorName,
-                    analysis.Diagrams.Select(diagram => diagram.OrchestratorName)));
+                    configPath,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (InvalidOperationException ex)
+            {
+                context.Fail(ex.Message);
                 return 1;
             }
+
+            var config = sourceSelection.Config;
+            ParseFormat(format, config);
+            var resolvedOutputDirectory = sourceSelection.OutputDirectory;
+            var selectedDiagrams = sourceSelection.SelectedDiagrams;
 
             var diagnostics = CliDiagnostics.Evaluate(selectedDiagrams, config);
             foreach (var warning in diagnostics.Where(d => d.Severity == CliDiagnosticSeverity.Warning))
