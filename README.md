@@ -72,6 +72,13 @@ When `--input` points to a `.sln`, discovery is strict: only projects included i
   /docs/examples
 ```
 
+## Contributor docs
+
+- Analysis pipeline map: `docs/architecture/analysis-pipeline.md`
+- CLI flow map: `docs/architecture/cli-flow.md`
+- Enhancement cookbook: `docs/contributor-cookbook.md`
+- Agent/contributor prompt guidance: `AGENTS.md`
+
 ## Verification
 
 ```bash

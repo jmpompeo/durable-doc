@@ -1,5 +1,3 @@
-using DurableDoc.Analysis;
-using DurableDoc.Configuration;
 using DurableDoc.Dashboard;
 
 namespace DurableDoc.Cli;
@@ -58,34 +56,30 @@ public static class DashboardCommandHandler
                 }
                 case DashboardInputKind.Source:
                 {
-                    var config = DurableDocConfigLoader.Load(configPath);
                     var renderMode = GenerateCommandHandler.ParseMode(mode ?? "developer");
-                    var resolvedOutputDirectory = GenerateCommandHandler.ResolveOutputDirectory(outputDirectory, config);
-                    var analyzer = new WorkflowAnalyzer();
-                    var analysis = await analyzer.AnalyzeWorkspaceAsync(inputPath, config, cancellationToken).ConfigureAwait(false);
-
-                    if (analysis.Diagrams.Count == 0)
+                    SourceWorkflowSelection sourceSelection;
+                    try
                     {
-                        context.Fail(GenerateCommandHandler.BuildNoDiscoveryMessage(analysis, inputPath));
-                        return 1;
-                    }
-
-                    var selectedDiagrams = WorkflowSelection.FilterDiagrams(analysis.Diagrams, orchestratorName);
-                    if (selectedDiagrams.Length == 0)
-                    {
-                        context.Fail(WorkflowSelection.BuildFilterMismatchMessage(
+                        sourceSelection = await SourceWorkflowLoader.LoadSelectedDiagramsAsync(
+                            inputPath,
+                            outputDirectory,
                             orchestratorName,
-                            analysis.Diagrams.Select(diagram => diagram.OrchestratorName)));
+                            configPath,
+                            cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        context.Fail(ex.Message);
                         return 1;
                     }
 
                     result = DashboardGenerator.WriteArtifactsAndBuild(
-                        resolvedOutputDirectory,
-                        GenerateCommandHandler.CreateArtifacts(selectedDiagrams, renderMode));
-                    previewDirectory = resolvedOutputDirectory;
+                        sourceSelection.OutputDirectory,
+                        GenerateCommandHandler.CreateArtifacts(sourceSelection.SelectedDiagrams, renderMode));
+                    previewDirectory = sourceSelection.OutputDirectory;
                     previewMode = renderMode.ToString().ToLowerInvariant();
-                    selectedOrchestratorNames = selectedDiagrams.Select(diagram => diagram.OrchestratorName).ToArray();
-                    context.Info($"Prepared {result.DiagramCount} diagram(s) in {Path.GetFullPath(resolvedOutputDirectory)}.");
+                    selectedOrchestratorNames = sourceSelection.SelectedDiagrams.Select(diagram => diagram.OrchestratorName).ToArray();
+                    context.Info($"Prepared {result.DiagramCount} diagram(s) in {Path.GetFullPath(sourceSelection.OutputDirectory)}.");
                     break;
                 }
                 default:
