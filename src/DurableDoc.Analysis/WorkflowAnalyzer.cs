@@ -978,45 +978,13 @@ internal static class WorkspaceSourceLoader
     private static async Task<WorkspaceLoadResult> LoadFromSolutionAsync(string solutionPath, DurableDocConfig? config, CancellationToken cancellationToken)
     {
         InitializeMsBuild();
-        using var workspace = MSBuildWorkspace.Create();
-        var solution = await workspace.OpenSolutionAsync(solutionPath, cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        var methods = new List<SourceMethod>();
-        var scannedProjects = new List<string>();
-        foreach (var project in solution.Projects.OrderBy(project => project.FilePath, StringComparer.OrdinalIgnoreCase))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (project.FilePath is not null)
-            {
-                scannedProjects.Add(project.FilePath);
-            }
-
-            methods.AddRange(await GetMethodsFromProjectAsync(project, config, cancellationToken).ConfigureAwait(false));
-        }
-
-        return new WorkspaceLoadResult
-        {
-            ResolvedInputPath = solutionPath,
-            InputKind = WorkflowInputKind.Solution,
-            ScannedProjects = scannedProjects,
-            Methods = methods,
-        };
+        return await MsBuildWorkspaceLoader.LoadFromSolutionAsync(solutionPath, config, cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task<WorkspaceLoadResult> LoadFromProjectAsync(string projectPath, DurableDocConfig? config, CancellationToken cancellationToken)
     {
         InitializeMsBuild();
-        using var workspace = MSBuildWorkspace.Create();
-        var project = await workspace.OpenProjectAsync(projectPath, cancellationToken: cancellationToken).ConfigureAwait(false);
-        var methods = await GetMethodsFromProjectAsync(project, config, cancellationToken).ConfigureAwait(false);
-
-        return new WorkspaceLoadResult
-        {
-            ResolvedInputPath = projectPath,
-            InputKind = WorkflowInputKind.Project,
-            ScannedProjects = [projectPath],
-            Methods = methods,
-        };
+        return await MsBuildWorkspaceLoader.LoadFromProjectAsync(projectPath, config, cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task<WorkspaceLoadResult> LoadFromFilesAsync(IReadOnlyList<string> files, WorkflowInputKind inputKind, DurableDocConfig? config, CancellationToken cancellationToken)
@@ -1112,6 +1080,51 @@ internal static class WorkspaceSourceLoader
         if (!MSBuildLocator.IsRegistered)
         {
             MSBuildLocator.RegisterDefaults();
+        }
+    }
+
+    private static class MsBuildWorkspaceLoader
+    {
+        public static async Task<WorkspaceLoadResult> LoadFromSolutionAsync(string solutionPath, DurableDocConfig? config, CancellationToken cancellationToken)
+        {
+            using var workspace = MSBuildWorkspace.Create();
+            var solution = await workspace.OpenSolutionAsync(solutionPath, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            var methods = new List<SourceMethod>();
+            var scannedProjects = new List<string>();
+            foreach (var project in solution.Projects.OrderBy(project => project.FilePath, StringComparer.OrdinalIgnoreCase))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (project.FilePath is not null)
+                {
+                    scannedProjects.Add(project.FilePath);
+                }
+
+                methods.AddRange(await GetMethodsFromProjectAsync(project, config, cancellationToken).ConfigureAwait(false));
+            }
+
+            return new WorkspaceLoadResult
+            {
+                ResolvedInputPath = solutionPath,
+                InputKind = WorkflowInputKind.Solution,
+                ScannedProjects = scannedProjects,
+                Methods = methods,
+            };
+        }
+
+        public static async Task<WorkspaceLoadResult> LoadFromProjectAsync(string projectPath, DurableDocConfig? config, CancellationToken cancellationToken)
+        {
+            using var workspace = MSBuildWorkspace.Create();
+            var project = await workspace.OpenProjectAsync(projectPath, cancellationToken: cancellationToken).ConfigureAwait(false);
+            var methods = await GetMethodsFromProjectAsync(project, config, cancellationToken).ConfigureAwait(false);
+
+            return new WorkspaceLoadResult
+            {
+                ResolvedInputPath = projectPath,
+                InputKind = WorkflowInputKind.Project,
+                ScannedProjects = [projectPath],
+                Methods = methods,
+            };
         }
     }
 }
