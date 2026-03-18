@@ -1,5 +1,6 @@
 using DurableDoc.Analysis;
 using DurableDoc.Configuration;
+using DurableDoc.Domain;
 
 namespace DurableDoc.Cli;
 
@@ -28,13 +29,22 @@ public static class ValidateCommandHandler
                 return 1;
             }
 
-            var diagrams = WorkflowSelection.FilterDiagrams(analysis.Diagrams, orchestratorName);
+            WorkflowDiagram[] diagrams;
+            try
+            {
+                diagrams = WorkflowSelection.FilterDiagrams(analysis.Diagrams, orchestratorName);
+            }
+            catch (InvalidOperationException ex)
+            {
+                context.Fail(ex.Message);
+                return 1;
+            }
 
             if (diagrams.Length == 0)
             {
                 context.Fail(WorkflowSelection.BuildFilterMismatchMessage(
                     orchestratorName,
-                    analysis.Diagrams.Select(diagram => diagram.OrchestratorName)));
+                    analysis.Diagrams.Select(diagram => diagram.OrchestratorDisplayName)));
                 return 1;
             }
 

@@ -78,7 +78,7 @@ public static class GenerateCommandHandler
                     context,
                     WorkflowSelection.ResolvePreviewOrchestrator(
                         orchestratorName,
-                        selectedDiagrams.Select(diagram => diagram.OrchestratorName)),
+                        selectedDiagrams.Select(diagram => diagram.OrchestratorKey)),
                     renderMode.ToString().ToLowerInvariant(),
                     browserLauncher,
                     cancellationToken).ConfigureAwait(false);
@@ -105,6 +105,8 @@ public static class GenerateCommandHandler
             {
                 DiagramId = renderedDiagram.Id,
                 OrchestratorName = renderedDiagram.OrchestratorName,
+                OrchestratorKey = renderedDiagram.OrchestratorKey,
+                OrchestratorDisplayName = renderedDiagram.OrchestratorDisplayName,
                 Mode = renderMode.ToString().ToLowerInvariant(),
                 GeneratedAt = generatedAt,
                 Mermaid = MermaidRenderer.Render(renderedDiagram),

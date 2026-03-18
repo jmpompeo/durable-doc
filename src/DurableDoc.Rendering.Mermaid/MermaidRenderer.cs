@@ -212,10 +212,14 @@ public static class MermaidRenderer
             {
                 Id = diagram.Id,
                 OrchestratorName = diagram.OrchestratorName,
+                OrchestratorKey = diagram.OrchestratorKey,
+                OrchestratorDisplayName = diagram.OrchestratorDisplayName,
                 SourceFile = diagram.SourceFile,
+                SourceProjectPath = diagram.SourceProjectPath,
                 CreatedTimestamp = diagram.CreatedTimestamp,
                 Nodes = visibleNodes,
                 Edges = businessEdges,
+                Diagnostics = diagram.Diagnostics,
             };
         }
 

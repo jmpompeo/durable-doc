@@ -42,11 +42,13 @@ public sealed class WorkflowAnalyzer
         var recognizers = BuildRecognizerMap(config);
         var sourceMethodCatalog = SourceMethodCatalog.Create(workspace.Methods);
 
-        var diagrams = workspace.Methods
+        var diagrams = BusinessMetadataApplicator.Apply(
+            workspace.Methods
             .Where(IsOrchestrator)
-            .OrderBy(method => method.Method.Identifier.ValueText, StringComparer.Ordinal)
-            .Select(method => WorkflowBuilder.Build(method, recognizers, sourceMethodCatalog, config))
-            .ToArray();
+            .OrderBy(method => GetOrchestratorIdentity(method.Method).Key, StringComparer.Ordinal)
+            .Select(method => WorkflowBuilder.Build(method, recognizers, sourceMethodCatalog))
+            .ToArray(),
+            config);
 
         return new WorkflowAnalysisResult
         {
@@ -90,6 +92,29 @@ public sealed class WorkflowAnalyzer
 
         return hasTriggerAttribute || (hasContextParameter && !isPrivate);
     }
+
+    internal static OrchestratorIdentity GetOrchestratorIdentity(MethodDeclarationSyntax method)
+    {
+        var methodName = method.Identifier.ValueText;
+        var typeNames = method.Ancestors()
+            .OfType<TypeDeclarationSyntax>()
+            .Select(type => type.Identifier.ValueText)
+            .Reverse()
+            .ToArray();
+        var namespaceName = string.Join(
+            ".",
+            method.Ancestors()
+                .OfType<BaseNamespaceDeclarationSyntax>()
+                .Select(ns => ns.Name.ToString())
+                .Reverse()
+                .Where(name => !string.IsNullOrWhiteSpace(name)));
+
+        var typePath = typeNames.Length == 0 ? methodName : string.Join(".", typeNames);
+        var displayName = typeNames.Length == 0 ? methodName : $"{typePath}.{methodName}";
+        var key = string.IsNullOrWhiteSpace(namespaceName) ? displayName : $"{namespaceName}.{displayName}";
+
+        return new OrchestratorIdentity(key, displayName);
+    }
 }
 
 internal sealed class WorkflowBuilder
@@ -97,7 +122,6 @@ internal sealed class WorkflowBuilder
     private readonly SourceMethod _sourceMethod;
     private readonly IReadOnlyDictionary<string, WrapperRecognizer> _recognizers;
     private readonly SourceMethodCatalog _sourceMethodCatalog;
-    private readonly DurableDocConfig? _config;
     private readonly List<WorkflowNode> _nodes = [];
     private readonly List<WorkflowEdge> _edges = [];
     private readonly List<WorkflowIssue> _issues = [];
@@ -109,29 +133,27 @@ internal sealed class WorkflowBuilder
     private WorkflowBuilder(
         SourceMethod sourceMethod,
         IReadOnlyDictionary<string, WrapperRecognizer> recognizers,
-        SourceMethodCatalog sourceMethodCatalog,
-        DurableDocConfig? config)
+        SourceMethodCatalog sourceMethodCatalog)
     {
         _sourceMethod = sourceMethod;
         _recognizers = recognizers;
         _sourceMethodCatalog = sourceMethodCatalog;
-        _config = config;
         _helperMethods = BuildHelperMap(sourceMethod.Method);
     }
 
     public static WorkflowDiagram Build(
         SourceMethod sourceMethod,
         IReadOnlyDictionary<string, WrapperRecognizer> recognizers,
-        SourceMethodCatalog sourceMethodCatalog,
-        DurableDocConfig? config)
+        SourceMethodCatalog sourceMethodCatalog)
     {
-        var builder = new WorkflowBuilder(sourceMethod, recognizers, sourceMethodCatalog, config);
+        var builder = new WorkflowBuilder(sourceMethod, recognizers, sourceMethodCatalog);
         return builder.Build();
     }
 
     private WorkflowDiagram Build()
     {
         var method = _sourceMethod.Method;
+        var identity = WorkflowAnalyzer.GetOrchestratorIdentity(method);
         var span = method.GetLocation().GetLineSpan();
         var startNode = new WorkflowNode
         {
@@ -150,6 +172,8 @@ internal sealed class WorkflowBuilder
         {
             Id = $"{method.Identifier.ValueText}:{span.StartLinePosition.Line + 1}",
             OrchestratorName = method.Identifier.ValueText,
+            OrchestratorKey = identity.Key,
+            OrchestratorDisplayName = identity.DisplayName,
             SourceFile = span.Path,
             SourceProjectPath = _sourceMethod.ProjectPath,
             Nodes = _nodes,
@@ -157,7 +181,7 @@ internal sealed class WorkflowBuilder
             Diagnostics = _issues,
         };
 
-        return BusinessMetadataApplicator.Apply(diagram, _config);
+        return diagram;
     }
 
     private IReadOnlyList<PendingEdge> ProcessStatements(IEnumerable<StatementSyntax> statements, IReadOnlyList<PendingEdge> incoming, bool insideBranch)
@@ -656,12 +680,31 @@ internal sealed class WorkflowBuilder
 
 internal static class BusinessMetadataApplicator
 {
-    public static WorkflowDiagram Apply(WorkflowDiagram diagram, DurableDocConfig? config)
+    public static IReadOnlyList<WorkflowDiagram> Apply(IReadOnlyList<WorkflowDiagram> diagrams, DurableDocConfig? config)
     {
-        var orchestratorMetadata = config?.BusinessView?.Orchestrators?
-            .FirstOrDefault(entry => string.Equals(entry.Name, diagram.OrchestratorName, StringComparison.OrdinalIgnoreCase));
+        if (diagrams.Count == 0 || config?.BusinessView?.Orchestrators is null)
+        {
+            return diagrams;
+        }
 
-        if (orchestratorMetadata is null)
+        var metadataByKey = config.BusinessView.Orchestrators
+            .Select(metadata => new
+            {
+                Metadata = metadata,
+                Resolution = OrchestratorMetadataResolver.ResolveDiagram(diagrams, metadata.Name),
+            })
+            .Where(entry => entry.Resolution.Diagram is not null && !entry.Resolution.IsAmbiguous)
+            .GroupBy(entry => entry.Resolution.Diagram!.OrchestratorKey, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First().Metadata, StringComparer.OrdinalIgnoreCase);
+
+        return diagrams.Select(diagram => ApplyResolvedMetadata(diagram, metadataByKey)).ToArray();
+    }
+
+    private static WorkflowDiagram ApplyResolvedMetadata(
+        WorkflowDiagram diagram,
+        IReadOnlyDictionary<string, OrchestratorMetadata> metadataByKey)
+    {
+        if (!metadataByKey.TryGetValue(diagram.OrchestratorKey, out var orchestratorMetadata))
         {
             return diagram;
         }
@@ -720,6 +763,8 @@ internal static class BusinessMetadataApplicator
         {
             Id = diagram.Id,
             OrchestratorName = diagram.OrchestratorName,
+            OrchestratorKey = diagram.OrchestratorKey,
+            OrchestratorDisplayName = diagram.OrchestratorDisplayName,
             SourceFile = diagram.SourceFile,
             SourceProjectPath = diagram.SourceProjectPath,
             CreatedTimestamp = diagram.CreatedTimestamp,
@@ -731,6 +776,8 @@ internal static class BusinessMetadataApplicator
 }
 
 internal sealed record WrapperRecognizer(WorkflowNodeType NodeType, int? TargetNameArgumentIndex);
+
+internal readonly record struct OrchestratorIdentity(string Key, string DisplayName);
 
 internal sealed record SourceMethod(MethodDeclarationSyntax Method, string? ProjectPath);
 
@@ -763,7 +810,10 @@ internal sealed class SourceMethodCatalog
 
             if (WorkflowAnalyzer.IsOrchestrator(sourceMethod))
             {
+                var identity = WorkflowAnalyzer.GetOrchestratorIdentity(method);
                 PreferDocumentedValue(orchestratorSummariesByName, method.Identifier.ValueText, summary);
+                PreferDocumentedValue(orchestratorSummariesByName, identity.DisplayName, summary);
+                PreferDocumentedValue(orchestratorSummariesByName, identity.Key, summary);
                 continue;
             }
 

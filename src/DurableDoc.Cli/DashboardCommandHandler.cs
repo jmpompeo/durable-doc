@@ -39,19 +39,29 @@ public static class DashboardCommandHandler
                     RejectSourceOnlyOptions(outputDirectory, configPath);
 
                     var artifacts = DashboardGenerator.ReadArtifacts(inputPath);
-                    var selectedArtifacts = WorkflowSelection.FilterArtifacts(artifacts, orchestratorName);
+                    GeneratedDiagramArtifact[] selectedArtifacts;
+                    try
+                    {
+                        selectedArtifacts = WorkflowSelection.FilterArtifacts(artifacts, orchestratorName);
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        context.Fail(ex.Message);
+                        return 1;
+                    }
 
                     if (selectedArtifacts.Length == 0)
                     {
                         context.Fail(WorkflowSelection.BuildFilterMismatchMessage(
                             orchestratorName,
-                            artifacts.Select(artifact => artifact.OrchestratorName).Distinct(StringComparer.Ordinal)));
+                            artifacts.Select(artifact => string.IsNullOrWhiteSpace(artifact.OrchestratorDisplayName) ? artifact.OrchestratorName : artifact.OrchestratorDisplayName)
+                                .Distinct(StringComparer.Ordinal)));
                         return 1;
                     }
 
                     result = DashboardGenerator.BuildDashboard(inputPath, selectedArtifacts);
                     previewDirectory = inputPath;
-                    selectedOrchestratorNames = selectedArtifacts.Select(artifact => artifact.OrchestratorName).ToArray();
+                    selectedOrchestratorNames = selectedArtifacts.Select(artifact => string.IsNullOrWhiteSpace(artifact.OrchestratorKey) ? artifact.OrchestratorName : artifact.OrchestratorKey).ToArray();
                     break;
                 }
                 case DashboardInputKind.Source:
@@ -78,7 +88,7 @@ public static class DashboardCommandHandler
                         GenerateCommandHandler.CreateArtifacts(sourceSelection.SelectedDiagrams, renderMode));
                     previewDirectory = sourceSelection.OutputDirectory;
                     previewMode = renderMode.ToString().ToLowerInvariant();
-                    selectedOrchestratorNames = sourceSelection.SelectedDiagrams.Select(diagram => diagram.OrchestratorName).ToArray();
+                    selectedOrchestratorNames = sourceSelection.SelectedDiagrams.Select(diagram => diagram.OrchestratorKey).ToArray();
                     context.Info($"Prepared {result.DiagramCount} diagram(s) in {Path.GetFullPath(sourceSelection.OutputDirectory)}.");
                     break;
                 }

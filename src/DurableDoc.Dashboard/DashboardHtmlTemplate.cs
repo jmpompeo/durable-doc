@@ -1084,7 +1084,7 @@ internal static class DashboardScriptTemplate
 
     const defaultGroup = state.groups[0] || null;
     if (!state.selectedOrchestrator && defaultGroup) {
-      state.selectedOrchestrator = defaultGroup.orchestratorName;
+      state.selectedOrchestrator = defaultGroup.orchestratorKey;
     }
 
     const selectedGroup = getSelectedGroup();
@@ -1106,8 +1106,10 @@ internal static class DashboardScriptTemplate
     const grouped = new Map();
 
     diagrams.forEach(function (diagram) {
-      const existing = grouped.get(diagram.orchestratorName) || {
-        orchestratorName: diagram.orchestratorName,
+      const orchestratorKey = getArtifactOrchestratorKey(diagram);
+      const existing = grouped.get(orchestratorKey) || {
+        orchestratorKey: orchestratorKey,
+        orchestratorName: getArtifactOrchestratorLabel(diagram),
         sourceFile: diagram.sourceFile || '',
         sourceProjectPath: diagram.sourceProjectPath || '',
         modes: []
@@ -1124,7 +1126,7 @@ internal static class DashboardScriptTemplate
         return left.mode.localeCompare(right.mode);
       });
 
-      grouped.set(diagram.orchestratorName, existing);
+      grouped.set(orchestratorKey, existing);
     });
 
     return Array.from(grouped.values()).sort(function (left, right) {
@@ -1149,8 +1151,8 @@ internal static class DashboardScriptTemplate
       return matchesName && matchesMode;
     });
 
-    if (!state.filtered.some(function (group) { return group.orchestratorName === state.selectedOrchestrator; })) {
-      state.selectedOrchestrator = state.filtered[0] ? state.filtered[0].orchestratorName : '';
+    if (!state.filtered.some(function (group) { return group.orchestratorKey === state.selectedOrchestrator; })) {
+      state.selectedOrchestrator = state.filtered[0] ? state.filtered[0].orchestratorKey : '';
     }
 
     const selectedGroup = getSelectedGroup();
@@ -1206,7 +1208,7 @@ internal static class DashboardScriptTemplate
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'result';
-      if (group.orchestratorName === state.selectedOrchestrator) {
+      if (group.orchestratorKey === state.selectedOrchestrator) {
         button.classList.add('active');
       }
 
@@ -1222,7 +1224,7 @@ internal static class DashboardScriptTemplate
         '<div class="meta">' + escapeHtml(group.sourceProjectPath || group.sourceFile || 'Source unknown') + '</div>';
 
       button.addEventListener('click', function () {
-        state.selectedOrchestrator = group.orchestratorName;
+        state.selectedOrchestrator = group.orchestratorKey;
         if (!hasMode(group, state.selectedMode)) {
           state.selectedMode = hasMode(group, 'developer') ? 'developer' : group.modes[0].mode;
         }
@@ -1607,7 +1609,7 @@ internal static class DashboardScriptTemplate
   function buildBusinessFlow(artifact) {
     const items = [];
 
-    appendArtifact(artifact, 0, null, [artifact.orchestratorName], new Set());
+    appendArtifact(artifact, 0, null, [getArtifactOrchestratorKey(artifact)], new Set());
 
     const byKey = {};
     items.forEach(function (item) {
@@ -1620,12 +1622,12 @@ internal static class DashboardScriptTemplate
     };
 
     function appendArtifact(currentArtifact, baseDepth, parentKey, pathTokens, activeOrchestrators) {
-      const orchestratorKey = String(currentArtifact.orchestratorName || '').toLowerCase();
-      if (activeOrchestrators.has(orchestratorKey)) {
+      const artifactKey = String(getArtifactOrchestratorKey(currentArtifact) || '').toLowerCase();
+      if (activeOrchestrators.has(artifactKey)) {
         return;
       }
 
-      activeOrchestrators.add(orchestratorKey);
+      activeOrchestrators.add(artifactKey);
       const graph = buildGraph(currentArtifact);
       const startNode = getStartNode(currentArtifact);
       const startKey = startNode ? createNestedNodeKey(pathTokens, startNode.id) : '';
@@ -1663,13 +1665,13 @@ internal static class DashboardScriptTemplate
               childArtifact,
               depth + 1,
               nodeKey,
-              pathTokens.concat([node.id + ':' + childArtifact.orchestratorName]),
+              pathTokens.concat([node.id + ':' + getArtifactOrchestratorKey(childArtifact)]),
               new Set(activeOrchestrators));
           }
         }
       });
 
-      activeOrchestrators.delete(orchestratorKey);
+      activeOrchestrators.delete(artifactKey);
 
       function appendRootChildren(rootKey) {
         graph.nodes.forEach(function (node) {
@@ -1694,7 +1696,7 @@ internal static class DashboardScriptTemplate
                 childArtifact,
                 2,
                 nodeKey,
-                pathTokens.concat([node.id + ':' + childArtifact.orchestratorName]),
+                pathTokens.concat([node.id + ':' + getArtifactOrchestratorKey(childArtifact)]),
                 new Set(activeOrchestrators));
             }
           }
@@ -1733,7 +1735,8 @@ internal static class DashboardScriptTemplate
     }
 
     const childGroup = state.groups.find(function (group) {
-      return group.orchestratorName === childName;
+      return group.orchestratorName === childName
+        || group.orchestratorKey === childName;
     });
 
     return childGroup ? (getMode(childGroup, 'business') || null) : null;
@@ -1749,7 +1752,7 @@ internal static class DashboardScriptTemplate
   }
 
   function createFlatNodeKey(artifact, nodeId) {
-    return String(artifact.orchestratorName || '') + '|' + nodeId;
+    return getArtifactOrchestratorKey(artifact) + '|' + nodeId;
   }
 
   function getFlatNodeId(nodeKey) {
@@ -1779,9 +1782,9 @@ internal static class DashboardScriptTemplate
       return 'Workflow root';
     }
 
-    return flowItem.artifact.orchestratorName === getSelectedArtifact().orchestratorName
+    return getArtifactOrchestratorKey(flowItem.artifact) === getArtifactOrchestratorKey(getSelectedArtifact())
       ? 'Main orchestration'
-      : 'Nested under ' + flowItem.artifact.orchestratorName;
+      : 'Nested under ' + getArtifactOrchestratorLabel(flowItem.artifact);
   }
 
   function handleGlobalKeydown(event) {
@@ -1823,10 +1826,10 @@ internal static class DashboardScriptTemplate
     }
 
     const currentIndex = state.filtered.findIndex(function (group) {
-      return group.orchestratorName === state.selectedOrchestrator;
+      return group.orchestratorKey === state.selectedOrchestrator;
     });
     const nextIndex = clampIndex(currentIndex + direction, state.filtered.length);
-    state.selectedOrchestrator = state.filtered[nextIndex].orchestratorName;
+    state.selectedOrchestrator = state.filtered[nextIndex].orchestratorKey;
     ensureSelectedNode();
     renderResults();
     renderSelection();
@@ -2077,10 +2080,18 @@ internal static class DashboardScriptTemplate
 
   function getSelectedGroup() {
     return state.filtered.find(function (group) {
-      return group.orchestratorName === state.selectedOrchestrator;
+      return group.orchestratorKey === state.selectedOrchestrator;
     }) || state.groups.find(function (group) {
-      return group.orchestratorName === state.selectedOrchestrator;
+      return group.orchestratorKey === state.selectedOrchestrator;
     }) || null;
+  }
+
+  function getArtifactOrchestratorKey(artifact) {
+    return String(artifact.orchestratorKey || artifact.orchestratorDisplayName || artifact.orchestratorName || '');
+  }
+
+  function getArtifactOrchestratorLabel(artifact) {
+    return String(artifact.orchestratorDisplayName || artifact.orchestratorName || artifact.orchestratorKey || '');
   }
 
   function getSelectedArtifact() {

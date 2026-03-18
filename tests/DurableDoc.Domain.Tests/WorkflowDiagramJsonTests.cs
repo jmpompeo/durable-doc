@@ -11,6 +11,8 @@ public class WorkflowDiagramJsonTests
         {
             Id = "customer-onboarding",
             OrchestratorName = "CustomerOnboarding",
+            OrchestratorKey = "Workflows.CustomerOnboarding",
+            OrchestratorDisplayName = "CustomerOnboarding",
             SourceFile = "src/Orchestrators/CustomerOnboarding.cs",
             CreatedTimestamp = new DateTimeOffset(2025, 1, 15, 9, 30, 0, TimeSpan.Zero),
             Nodes =
@@ -60,6 +62,8 @@ public class WorkflowDiagramJsonTests
         {
             Id = "id",
             OrchestratorName = "orch",
+            OrchestratorKey = "Demo.orch",
+            OrchestratorDisplayName = "Demo.orch",
             Nodes =
             [
                 new WorkflowNode { Id = "b", DisplayLabel = "B", NodeType = WorkflowNodeType.Activity, LineNumber = 20 },

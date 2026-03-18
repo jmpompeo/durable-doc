@@ -24,14 +24,14 @@ internal static class CliDiagnostics
             return diagnostics;
         }
 
-        foreach (var diagram in diagrams.OrderBy(d => d.OrchestratorName, StringComparer.Ordinal))
+        foreach (var diagram in diagrams.OrderBy(d => d.OrchestratorDisplayName, StringComparer.Ordinal))
         {
             if (diagram.Nodes.Count <= 1)
             {
                 diagnostics.Add(new CliDiagnostic(
                     CliDiagnosticSeverity.Warning,
                     "No supported Durable calls were discovered. The generated diagram only contains the orchestrator entry point.",
-                    diagram.OrchestratorName));
+                    diagram.OrchestratorDisplayName));
             }
 
             if (diagram.Nodes.Any(node => node.NodeType == WorkflowNodeType.Wrapper))
@@ -39,7 +39,7 @@ internal static class CliDiagnostics
                 diagnostics.Add(new CliDiagnostic(
                     CliDiagnosticSeverity.Warning,
                     "Wrapper calls were detected and may need explicit config metadata for precise rendering.",
-                    diagram.OrchestratorName));
+                    diagram.OrchestratorDisplayName));
             }
 
             foreach (var issue in diagram.Diagnostics)
@@ -49,7 +49,7 @@ internal static class CliDiagnostics
                     issue.LineNumber > 0
                         ? $"{issue.Message} ({Path.GetFileName(issue.SourceFile)}:{issue.LineNumber})"
                         : issue.Message,
-                    diagram.OrchestratorName));
+                    diagram.OrchestratorDisplayName));
             }
         }
 
@@ -64,10 +64,19 @@ internal static class CliDiagnostics
             yield break;
         }
 
-        var diagramsByName = diagrams.ToDictionary(diagram => diagram.OrchestratorName, StringComparer.OrdinalIgnoreCase);
         foreach (var orchestrator in config.BusinessView.Orchestrators)
         {
-            if (!diagramsByName.TryGetValue(orchestrator.Name, out var diagram))
+            var resolution = OrchestratorMetadataResolver.ResolveDiagram(diagrams, orchestrator.Name);
+            if (resolution.IsAmbiguous)
+            {
+                yield return new CliDiagnostic(
+                    CliDiagnosticSeverity.Warning,
+                    $"Business metadata references orchestrator '{orchestrator.Name}', but it matches multiple discovered orchestrators. Use one of: {string.Join(", ", diagrams.Where(diagram => string.Equals(diagram.OrchestratorName, orchestrator.Name, StringComparison.OrdinalIgnoreCase) || string.Equals(diagram.OrchestratorDisplayName, orchestrator.Name, StringComparison.OrdinalIgnoreCase)).Select(diagram => diagram.OrchestratorKey).OrderBy(name => name, StringComparer.Ordinal))}.");
+                continue;
+            }
+
+            var diagram = resolution.Diagram;
+            if (diagram is null)
             {
                 yield return new CliDiagnostic(
                     CliDiagnosticSeverity.Warning,
@@ -86,7 +95,7 @@ internal static class CliDiagnostics
                     yield return new CliDiagnostic(
                         CliDiagnosticSeverity.Warning,
                         $"Business metadata references step '{step.Name}', but it was not discovered in orchestrator '{orchestrator.Name}'.",
-                        orchestrator.Name);
+                        diagram.OrchestratorDisplayName);
                 }
             }
         }
