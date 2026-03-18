@@ -80,5 +80,5 @@ public static class SampleAdvancedOrchestrator
     public static Task ScheduleWelcomeCall([ActivityTrigger] TaskActivityContext context)
         => Task.CompletedTask;
 
-    private sealed record CustomerApplication(string CustomerId, string ProductCode);
+    public sealed record CustomerApplication(string CustomerId, string ProductCode);
 }
