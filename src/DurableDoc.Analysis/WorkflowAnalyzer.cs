@@ -581,6 +581,9 @@ internal sealed class WorkflowBuilder
             case IdentifierNameSyntax identifierName:
                 value = identifierName.Identifier.ValueText;
                 return true;
+            case MemberAccessExpressionSyntax memberAccess:
+                value = memberAccess.Name.Identifier.ValueText;
+                return true;
             default:
                 value = string.Empty;
                 return false;
@@ -788,15 +791,40 @@ internal sealed class SourceMethodCatalog
         return nodeType switch
         {
             WorkflowNodeType.SubOrchestrator or WorkflowNodeType.RetrySubOrchestrator =>
-                GetValue(_orchestratorSummariesByName, stepName),
+                FindFirstValue(_orchestratorSummariesByName, stepName),
             WorkflowNodeType.Activity or WorkflowNodeType.RetryActivity =>
-                GetValue(_activitySummariesByMethodName, stepName) ?? GetValue(_activitySummariesByFunctionName, stepName),
+                FindFirstValue(_activitySummariesByMethodName, stepName) ?? FindFirstValue(_activitySummariesByFunctionName, stepName),
             _ => null,
         };
     }
 
     private static string? GetValue(Dictionary<string, string?> map, string key)
         => map.TryGetValue(key, out var value) ? value : null;
+
+    private static string? FindFirstValue(Dictionary<string, string?> map, string key)
+    {
+        foreach (var candidate in EnumerateLookupKeys(key))
+        {
+            var value = GetValue(map, candidate);
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<string> EnumerateLookupKeys(string key)
+    {
+        yield return key;
+
+        var lastDotIndex = key.LastIndexOf('.');
+        if (lastDotIndex > -1 && lastDotIndex < key.Length - 1)
+        {
+            yield return key[(lastDotIndex + 1)..];
+        }
+    }
 
     private static void PreferDocumentedValue(Dictionary<string, string?> map, string key, string? summary)
     {
