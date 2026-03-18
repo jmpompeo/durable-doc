@@ -2201,33 +2201,6 @@ internal static class DashboardScriptTemplate
     return String(artifact.orchestratorDisplayName || artifact.orchestratorName || artifact.orchestratorKey || '');
   }
 
-  function setViewerLink(artifact) {
-    if (!openRenderedDiagramEl) {
-      return;
-    }
-
-    if (!artifact) {
-      openRenderedDiagramEl.href = 'diagram.html';
-      openRenderedDiagramEl.classList.add('disabled');
-      openRenderedDiagramEl.setAttribute('aria-disabled', 'true');
-      return;
-    }
-
-    openRenderedDiagramEl.href = buildViewerUrl(artifact);
-    openRenderedDiagramEl.classList.remove('disabled');
-    openRenderedDiagramEl.setAttribute('aria-disabled', 'false');
-  }
-
-  function buildViewerUrl(artifact) {
-    const url = new URL('diagram.html', window.location.href);
-    url.searchParams.set('orchestrator', getArtifactOrchestratorKey(artifact));
-    if (artifact.mode) {
-      url.searchParams.set('mode', artifact.mode);
-    }
-
-    return url.toString();
-  }
-
   function getSelectedArtifact() {
     const group = getSelectedGroup();
     return group ? getMode(group, state.selectedMode) : null;
