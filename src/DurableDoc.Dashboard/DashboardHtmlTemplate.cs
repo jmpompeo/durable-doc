@@ -108,7 +108,7 @@ internal static class DashboardHtmlTemplate
 
         <details class="source-panel">
           <summary>Mermaid source</summary>
-          <a id="open-rendered-diagram" class="viewer-link disabled" href="diagram.html" target="_blank" rel="noopener noreferrer" aria-disabled="true">Open rendered diagram</a>
+          <a id="open-rendered-diagram" class="source-panel-link disabled" href="diagram.html" target="_blank" rel="noopener noreferrer" aria-disabled="true">Open rendered diagram</a>
           <pre id="source" class="source"></pre>
         </details>
       </aside>
@@ -255,7 +255,7 @@ code {
 
 .workspace {
   grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
-  align-items: start;
+  align-items: stretch;
   min-width: 0;
 }
 
@@ -482,6 +482,7 @@ select {
 }
 
 .stage.collapsed .stage-actions {
+  display: grid;
   justify-items: stretch;
 }
 
@@ -490,16 +491,25 @@ select {
 }
 
 .stage-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
+  display: grid;
+  gap: 14px;
   align-items: start;
 }
 
+.stage-header > div:first-child {
+  min-width: 0;
+}
+
 .stage-actions {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
-  justify-items: end;
+  align-items: center;
+}
+
+.stage-actions .refresh-indicator {
+  margin-left: auto;
+  text-align: right;
 }
 
 .mode-switcher button,
@@ -580,6 +590,11 @@ select {
 
 .legend {
   min-height: 36px;
+}
+
+#selected-title {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .legend-item {
@@ -880,7 +895,25 @@ button.legend-item:focus-visible {
   font-weight: 700;
 }
 
-.viewer-link,
+.source-panel-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: #ffffff;
+  color: var(--accent-strong);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.source-panel-link.disabled {
+  color: var(--muted);
+  pointer-events: none;
+}
+
 .viewer-back-link {
   display: inline-flex;
   align-items: center;
@@ -889,11 +922,6 @@ button.legend-item:focus-visible {
   color: var(--accent-strong);
   font-weight: 700;
   text-decoration: none;
-}
-
-.viewer-link.disabled {
-  color: var(--muted);
-  pointer-events: none;
 }
 
 .source {
@@ -939,10 +967,20 @@ button.legend-item:focus-visible {
   background: #fbf7f1;
   padding: 18px;
   min-height: 420px;
+  overflow: auto;
 }
 
 .diagram-render {
-  white-space: pre-wrap;
+  min-width: fit-content;
+}
+
+.diagram-render svg {
+  display: block;
+  height: auto;
+}
+
+.diagram-render .empty {
+  min-width: 0;
 }
 
 @media (max-width: 1200px) {
@@ -962,6 +1000,12 @@ button.legend-item:focus-visible {
 
   .diagram-grid.compare {
     grid-template-columns: 1fr;
+  }
+
+  .stage-actions .refresh-indicator {
+    margin-left: 0;
+    text-align: left;
+    width: 100%;
   }
 
   .diagram-viewer-header {
@@ -2183,6 +2227,46 @@ internal static class DashboardScriptTemplate
     return items.map(function (item) {
       return '<span class="edge-chip">' + escapeHtml(item) + '</span>';
     }).join('');
+  }
+
+  function setViewerLink(selected) {
+    if (!openRenderedDiagramEl) {
+      return;
+    }
+
+    const viewerUrl = buildViewerUrl(selected);
+    if (!viewerUrl) {
+      openRenderedDiagramEl.href = 'diagram.html';
+      openRenderedDiagramEl.classList.add('disabled');
+      openRenderedDiagramEl.setAttribute('aria-disabled', 'true');
+      return;
+    }
+
+    openRenderedDiagramEl.href = viewerUrl;
+    openRenderedDiagramEl.classList.remove('disabled');
+    openRenderedDiagramEl.setAttribute('aria-disabled', 'false');
+  }
+
+  function buildViewerUrl(artifact) {
+    if (!artifact) {
+      return null;
+    }
+
+    const orchestratorKey = getArtifactOrchestratorKey(artifact);
+    if (!orchestratorKey) {
+      return null;
+    }
+
+    const url = new URL('diagram.html', window.location.href);
+    url.searchParams.set('orchestrator', orchestratorKey);
+
+    if (artifact.mode) {
+      url.searchParams.set('mode', artifact.mode);
+    } else {
+      url.searchParams.delete('mode');
+    }
+
+    return url.toString();
   }
 
   function getSelectedGroup() {
