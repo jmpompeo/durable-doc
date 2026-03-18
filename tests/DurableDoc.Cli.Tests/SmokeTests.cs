@@ -60,6 +60,8 @@ public class Demo
         Assert.Contains("\"nodes\": [", artifact, StringComparison.Ordinal);
         Assert.Contains("\"edges\": [", artifact, StringComparison.Ordinal);
         Assert.Contains("\"nodeType\": \"OrchestratorStart\"", artifact, StringComparison.Ordinal);
+        Assert.Contains("\"orchestratorKey\": \"Demo.First\"", artifact, StringComparison.Ordinal);
+        Assert.Contains("\"orchestratorDisplayName\": \"Demo.First\"", artifact, StringComparison.Ordinal);
         Assert.Contains("\"nodeType\": \"OrchestratorStart\"", dashboardData, StringComparison.Ordinal);
         Assert.Contains("\"nodes\": [", artifact, StringComparison.Ordinal);
         Assert.Contains("\"edges\": [", artifact, StringComparison.Ordinal);
@@ -228,6 +230,95 @@ public class Demo
     }
 
     [Fact]
+    public async Task Generate_fails_when_bare_orchestrator_filter_is_ambiguous()
+    {
+        using var fixture = new CliFixture(
+            """
+using System.Threading.Tasks;
+
+namespace Samples;
+
+public class FirstOrchestrator
+{
+    [OrchestrationTrigger]
+    public async Task RunAsync(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ValidateOrder");
+    }
+}
+
+public class SecondOrchestrator
+{
+    [OrchestrationTrigger]
+    public async Task RunAsync(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ChargePayment");
+    }
+}
+""");
+
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var context = new DurableDoc.Cli.CliCommandContext(output, error, DurableDoc.Cli.CliVerbosity.Normal, ci: false);
+
+        var exitCode = await DurableDoc.Cli.GenerateCommandHandler.ExecuteAsync(
+            fixture.SourceDirectory,
+            fixture.OutputDirectory,
+            orchestratorName: "RunAsync",
+            mode: "developer",
+            configPath: null,
+            context: context);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("The orchestrator filter 'RunAsync' is ambiguous.", error.ToString(), StringComparison.Ordinal);
+        Assert.Contains("Samples.FirstOrchestrator.RunAsync", error.ToString(), StringComparison.Ordinal);
+        Assert.Contains("Samples.SecondOrchestrator.RunAsync", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Generate_accepts_qualified_orchestrator_filter_when_run_async_is_duplicated()
+    {
+        using var fixture = new CliFixture(
+            """
+using System.Threading.Tasks;
+
+namespace Samples;
+
+public class FirstOrchestrator
+{
+    [OrchestrationTrigger]
+    public async Task RunAsync(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ValidateOrder");
+    }
+}
+
+public class SecondOrchestrator
+{
+    [OrchestrationTrigger]
+    public async Task RunAsync(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ChargePayment");
+    }
+}
+""");
+
+        var exitCode = await DurableDoc.Cli.GenerateCommandHandler.ExecuteAsync(
+            fixture.SourceDirectory,
+            fixture.OutputDirectory,
+            orchestratorName: "FirstOrchestrator.RunAsync",
+            mode: "developer",
+            configPath: null);
+
+        Assert.Equal(0, exitCode);
+        Assert.Single(Directory.EnumerateFiles(fixture.OutputDirectory, "*.diagram.json"));
+
+        var dashboardData = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "dashboard-data.json"));
+        Assert.Contains("\"orchestratorKey\": \"Samples.FirstOrchestrator.RunAsync\"", dashboardData, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"orchestratorKey\": \"Samples.SecondOrchestrator.RunAsync\"", dashboardData, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Dashboard_rebuilds_static_html_from_existing_artifacts()
     {
         using var fixture = new CliFixture(
@@ -325,9 +416,9 @@ public class Demo
         using var client = new HttpClient();
         var dashboard = await client.GetStringAsync(previewUri);
 
-        Assert.Equal("Second", GetQueryValue(previewUri, "orchestrator"));
+        Assert.Equal("Demo.Second", GetQueryValue(previewUri, "orchestrator"));
         Assert.Equal("developer", GetQueryValue(previewUri, "mode"));
-        Assert.Contains("Second", dashboard, StringComparison.Ordinal);
+        Assert.Contains("Demo.Second", dashboard, StringComparison.Ordinal);
         Assert.DoesNotContain("First", dashboard, StringComparison.Ordinal);
 
         cancellation.Cancel();
@@ -382,6 +473,54 @@ public class Demo
         var dashboardData = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "dashboard-data.json"));
         Assert.Contains("\"orchestratorName\": \"Second\"", dashboardData, StringComparison.Ordinal);
         Assert.DoesNotContain("\"orchestratorName\": \"First\"", dashboardData, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Dashboard_on_artifact_input_accepts_qualified_filter_for_duplicate_run_async_orchestrators()
+    {
+        using var fixture = new CliFixture(
+            """
+using System.Threading.Tasks;
+
+namespace Samples;
+
+public class FirstOrchestrator
+{
+    [OrchestrationTrigger]
+    public async Task RunAsync(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ValidateOrder");
+    }
+}
+
+public class SecondOrchestrator
+{
+    [OrchestrationTrigger]
+    public async Task RunAsync(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ChargePayment");
+    }
+}
+""");
+
+        var generateExitCode = await DurableDoc.Cli.GenerateCommandHandler.ExecuteAsync(
+            fixture.SourceDirectory,
+            fixture.OutputDirectory,
+            orchestratorName: null,
+            mode: "developer",
+            configPath: null);
+
+        Assert.Equal(0, generateExitCode);
+
+        var dashboardExitCode = await DurableDoc.Cli.DashboardCommandHandler.ExecuteAsync(
+            fixture.OutputDirectory,
+            orchestratorName: "FirstOrchestrator.RunAsync");
+
+        Assert.Equal(0, dashboardExitCode);
+
+        var dashboardData = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "dashboard-data.json"));
+        Assert.Contains("\"orchestratorKey\": \"Samples.FirstOrchestrator.RunAsync\"", dashboardData, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"orchestratorKey\": \"Samples.SecondOrchestrator.RunAsync\"", dashboardData, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -470,9 +609,9 @@ public class Demo
         var dashboard = await client.GetStringAsync(previewUri);
         var bundle = await client.GetStringAsync(new Uri(previewUri, "mermaid.min.js"));
 
-        Assert.Equal("First", GetQueryValue(previewUri, "orchestrator"));
+        Assert.Equal("Demo.First", GetQueryValue(previewUri, "orchestrator"));
         Assert.Equal("developer", GetQueryValue(previewUri, "mode"));
-        Assert.Equal("First", GetQueryValue(previewUri, "orchestrator"));
+        Assert.Equal("Demo.First", GetQueryValue(previewUri, "orchestrator"));
         Assert.Equal("developer", GetQueryValue(previewUri, "mode"));
         Assert.Contains("First", dashboard);
         Assert.Contains("\"displayLabel\": \"First\"", dashboard, StringComparison.Ordinal);
@@ -667,10 +806,52 @@ public class Demo
         Assert.Equal(0, exitCode);
         var lines = output.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal(2, lines.Length);
-        Assert.StartsWith("Alpha | ", lines[0], StringComparison.Ordinal);
-        Assert.StartsWith("Beta | ", lines[1], StringComparison.Ordinal);
+        Assert.StartsWith("Demo.Alpha | ", lines[0], StringComparison.Ordinal);
+        Assert.StartsWith("Demo.Beta | ", lines[1], StringComparison.Ordinal);
         Assert.Contains("activities=ValidateOrder", lines[0], StringComparison.Ordinal);
         Assert.Contains("subOrchestrators=Child", lines[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task List_uses_qualified_display_names_for_duplicate_run_async_orchestrators()
+    {
+        using var fixture = new CliFixture(
+            """
+using System.Threading.Tasks;
+
+public class FirstOrchestrator
+{
+    [OrchestrationTrigger]
+    public async Task RunAsync(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ValidateOrder");
+    }
+}
+
+public class SecondOrchestrator
+{
+    [OrchestrationTrigger]
+    public async Task RunAsync(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ChargePayment");
+    }
+}
+""");
+
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var context = new DurableDoc.Cli.CliCommandContext(output, error, DurableDoc.Cli.CliVerbosity.Normal, ci: false);
+
+        var exitCode = await DurableDoc.Cli.ListCommandHandler.ExecuteAsync(
+            fixture.SourceDirectory,
+            orchestratorName: null,
+            configPath: null,
+            context: context);
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("FirstOrchestrator.RunAsync | ", output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("SecondOrchestrator.RunAsync | ", output.ToString(), StringComparison.Ordinal);
+        Assert.Equal(string.Empty, error.ToString());
     }
 
     [Fact]
@@ -701,7 +882,7 @@ public class Demo
             context: context);
 
         Assert.Equal(1, exitCode);
-        Assert.Contains("warning:Run:", error.ToString(), StringComparison.Ordinal);
+        Assert.Contains("warning:Demo.Run:", error.ToString(), StringComparison.Ordinal);
         Assert.Contains("error:Validation completed with warnings", error.ToString(), StringComparison.Ordinal);
     }
 
@@ -751,6 +932,127 @@ public class Demo
 
         Assert.Equal(0, exitCode);
         Assert.Contains("MissingStep", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Validate_warns_when_business_metadata_references_ambiguous_bare_orchestrator_name()
+    {
+        using var fixture = new CliFixture(
+            """
+using System.Threading.Tasks;
+
+namespace Samples;
+
+public class FirstOrchestrator
+{
+    [OrchestrationTrigger]
+    public async Task RunAsync(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ValidateOrder");
+    }
+}
+
+public class SecondOrchestrator
+{
+    [OrchestrationTrigger]
+    public async Task RunAsync(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ChargePayment");
+    }
+}
+""");
+
+        var configPath = fixture.WriteConfig(
+            """
+            {
+              "version": 1,
+              "businessView": {
+                "orchestrators": [
+                  {
+                    "name": "RunAsync",
+                    "steps": [
+                      { "name": "MissingStep", "businessName": "Missing step" }
+                    ]
+                  }
+                ]
+              }
+            }
+            """);
+
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var context = new DurableDoc.Cli.CliCommandContext(output, error, DurableDoc.Cli.CliVerbosity.Normal, ci: false);
+
+        var exitCode = await DurableDoc.Cli.ValidateCommandHandler.ExecuteAsync(
+            fixture.SourceDirectory,
+            configPath: configPath,
+            strict: false,
+            context: context);
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("matches multiple discovered orchestrators", error.ToString(), StringComparison.Ordinal);
+        Assert.Contains("Samples.FirstOrchestrator.RunAsync", error.ToString(), StringComparison.Ordinal);
+        Assert.Contains("Samples.SecondOrchestrator.RunAsync", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Validate_resolves_qualified_business_metadata_name_for_duplicate_run_async_orchestrator()
+    {
+        using var fixture = new CliFixture(
+            """
+using System.Threading.Tasks;
+
+namespace Samples;
+
+public class FirstOrchestrator
+{
+    [OrchestrationTrigger]
+    public async Task RunAsync(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ValidateOrder");
+    }
+}
+
+public class SecondOrchestrator
+{
+    [OrchestrationTrigger]
+    public async Task RunAsync(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ChargePayment");
+    }
+}
+""");
+
+        var configPath = fixture.WriteConfig(
+            """
+            {
+              "version": 1,
+              "businessView": {
+                "orchestrators": [
+                  {
+                    "name": "Samples.SecondOrchestrator.RunAsync",
+                    "steps": [
+                      { "name": "MissingStep", "businessName": "Missing step" }
+                    ]
+                  }
+                ]
+              }
+            }
+            """);
+
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var context = new DurableDoc.Cli.CliCommandContext(output, error, DurableDoc.Cli.CliVerbosity.Normal, ci: false);
+
+        var exitCode = await DurableDoc.Cli.ValidateCommandHandler.ExecuteAsync(
+            fixture.SourceDirectory,
+            configPath: configPath,
+            strict: false,
+            context: context);
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("SecondOrchestrator.RunAsync: Business metadata references step 'MissingStep'", error.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("matches multiple discovered orchestrators", error.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -894,7 +1196,7 @@ public class Demo
 
         var lines = output.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal(4, lines.Length);
-        Assert.Contains(lines, line => line.StartsWith("RunCustomerOnboarding | ", StringComparison.Ordinal));
+        Assert.Contains(lines, line => line.StartsWith("SampleAdvancedOrchestrator.RunCustomerOnboarding | ", StringComparison.Ordinal));
         Assert.Contains(lines, line => line.Contains("activities=LoadApplication, ReserveCreditCheck, SendWelcomeEmail, ValidateCustomer", StringComparison.Ordinal));
         Assert.Contains(lines, line => line.Contains("subOrchestrators=CollectDocumentsSubOrchestrator, ProvisionAccountSubOrchestrator", StringComparison.Ordinal));
         Assert.Equal(string.Empty, error.ToString());
@@ -914,7 +1216,7 @@ public class Demo
             context: context);
 
         Assert.Equal(0, exitCode);
-        Assert.Contains("RunCustomerOnboarding | ", output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("SampleAdvancedOrchestrator.RunCustomerOnboarding | ", output.ToString(), StringComparison.Ordinal);
         Assert.Equal(string.Empty, error.ToString());
     }
 

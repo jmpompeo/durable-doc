@@ -1,6 +1,8 @@
 {
   "Id": "customer-onboarding",
   "OrchestratorName": "CustomerOnboarding",
+  "OrchestratorKey": "Workflows.CustomerOnboarding",
+  "OrchestratorDisplayName": "CustomerOnboarding",
   "SourceFile": "src/Orchestrators/CustomerOnboarding.cs",
   "CreatedTimestamp": "2025-01-15T09:30:00+00:00",
   "Nodes": [

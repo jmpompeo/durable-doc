@@ -27,6 +27,10 @@ internal sealed class SerializableWorkflowDiagram
 
     public string OrchestratorName { get; init; } = string.Empty;
 
+    public string OrchestratorKey { get; init; } = string.Empty;
+
+    public string OrchestratorDisplayName { get; init; } = string.Empty;
+
     public string? SourceFile { get; init; }
 
     public string? SourceProjectPath { get; init; }
@@ -45,6 +49,8 @@ internal sealed class SerializableWorkflowDiagram
         {
             Id = diagram.Id,
             OrchestratorName = diagram.OrchestratorName,
+            OrchestratorKey = diagram.OrchestratorKey,
+            OrchestratorDisplayName = diagram.OrchestratorDisplayName,
             SourceFile = diagram.SourceFile,
             SourceProjectPath = diagram.SourceProjectPath,
             CreatedTimestamp = diagram.CreatedTimestamp,

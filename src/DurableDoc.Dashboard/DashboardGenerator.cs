@@ -9,6 +9,8 @@ public sealed class GeneratedDiagramArtifact
 {
     public string DiagramId { get; init; } = string.Empty;
     public string OrchestratorName { get; init; } = string.Empty;
+    public string OrchestratorKey { get; init; } = string.Empty;
+    public string OrchestratorDisplayName { get; init; } = string.Empty;
     public string Mode { get; init; } = string.Empty;
     public DateTimeOffset GeneratedAt { get; init; }
     public string Mermaid { get; init; } = string.Empty;
@@ -39,7 +41,7 @@ public static class DashboardGenerator
         Directory.CreateDirectory(outputPath);
 
         var materialized = diagrams
-            .OrderBy(diagram => diagram.OrchestratorName, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(diagram => GetArtifactDisplayName(diagram), StringComparer.OrdinalIgnoreCase)
             .ThenBy(diagram => diagram.Mode, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
@@ -90,7 +92,7 @@ public static class DashboardGenerator
         var outputPath = Path.GetFullPath(outputDirectory);
         Directory.CreateDirectory(outputPath);
         var materialized = diagrams
-            .OrderBy(diagram => diagram.OrchestratorName, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(diagram => GetArtifactDisplayName(diagram), StringComparer.OrdinalIgnoreCase)
             .ThenBy(diagram => diagram.Mode, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         if (materialized.Length == 0)
@@ -127,6 +129,13 @@ public static class DashboardGenerator
         return JsonSerializer.Serialize(diagrams, DashboardJson.SerializerOptions)
             .Replace("</", "<\\/", StringComparison.Ordinal);
     }
+
+    private static string GetArtifactDisplayName(GeneratedDiagramArtifact artifact)
+    {
+        return string.IsNullOrWhiteSpace(artifact.OrchestratorDisplayName)
+            ? artifact.OrchestratorName
+            : artifact.OrchestratorDisplayName;
+    }
 }
 
 internal static class DiagramArtifactStore
@@ -140,6 +149,8 @@ internal static class DiagramArtifactStore
         {
             DiagramId = artifact.DiagramId,
             OrchestratorName = artifact.OrchestratorName,
+            OrchestratorKey = artifact.OrchestratorKey,
+            OrchestratorDisplayName = artifact.OrchestratorDisplayName,
             Mode = artifact.Mode,
             GeneratedAt = artifact.GeneratedAt,
             Mermaid = artifact.Mermaid,

@@ -4,6 +4,8 @@ public sealed class WorkflowDiagram
 {
     public string Id { get; init; } = string.Empty;
     public string OrchestratorName { get; init; } = string.Empty;
+    public string OrchestratorKey { get; init; } = string.Empty;
+    public string OrchestratorDisplayName { get; init; } = string.Empty;
     public string? SourceFile { get; init; }
     public string? SourceProjectPath { get; init; }
     public DateTimeOffset CreatedTimestamp { get; init; } = DateTimeOffset.UtcNow;
@@ -29,6 +31,8 @@ public sealed class WorkflowDiagram
         {
             Id = Id,
             OrchestratorName = OrchestratorName,
+            OrchestratorKey = OrchestratorKey,
+            OrchestratorDisplayName = OrchestratorDisplayName,
             SourceFile = SourceFile,
             SourceProjectPath = SourceProjectPath,
             CreatedTimestamp = CreatedTimestamp,

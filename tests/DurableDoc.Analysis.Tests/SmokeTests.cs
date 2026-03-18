@@ -286,6 +286,46 @@ public class Demo
     }
 
     [Fact]
+    public async Task AnalyzeAsync_AssignsQualifiedIdentity_WhenMultipleOrchestratorsShareRunAsync()
+    {
+        using var fixture = new TempSourceFixture("""
+using System.Threading.Tasks;
+
+namespace Samples;
+
+public class FirstOrchestrator
+{
+    [OrchestrationTrigger]
+    public async Task RunAsync(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ValidateOrder");
+    }
+}
+
+public class SecondOrchestrator
+{
+    [OrchestrationTrigger]
+    public async Task RunAsync(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ChargePayment");
+    }
+}
+""");
+
+        var analyzer = new WorkflowAnalyzer();
+        var diagrams = await analyzer.AnalyzeAsync(fixture.DirectoryPath);
+
+        Assert.Equal(2, diagrams.Count);
+        Assert.All(diagrams, diagram => Assert.Equal("RunAsync", diagram.OrchestratorName));
+        Assert.Equal(
+            ["Samples.FirstOrchestrator.RunAsync", "Samples.SecondOrchestrator.RunAsync"],
+            diagrams.Select(diagram => diagram.OrchestratorKey).OrderBy(name => name, StringComparer.Ordinal).ToArray());
+        Assert.Equal(
+            ["FirstOrchestrator.RunAsync", "SecondOrchestrator.RunAsync"],
+            diagrams.Select(diagram => diagram.OrchestratorDisplayName).OrderBy(name => name, StringComparer.Ordinal).ToArray());
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_RecognizesBuiltInWrapperWithoutConfig()
     {
         using var fixture = new TempSourceFixture("""
@@ -414,6 +454,8 @@ public class Demo
         var json = WorkflowDiagramJson.Serialize(Assert.Single(diagrams));
 
         Assert.Contains("\"orchestratorName\"", json, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"orchestratorKey\"", json, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"orchestratorDisplayName\"", json, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("\"nodes\"", json, StringComparison.OrdinalIgnoreCase);
     }
 }

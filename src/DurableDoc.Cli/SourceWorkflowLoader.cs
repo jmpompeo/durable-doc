@@ -23,12 +23,21 @@ internal static class SourceWorkflowLoader
             throw new InvalidOperationException(GenerateCommandHandler.BuildNoDiscoveryMessage(analysis, inputPath));
         }
 
-        var selectedDiagrams = WorkflowSelection.FilterDiagrams(analysis.Diagrams, orchestratorName);
+        WorkflowDiagram[] selectedDiagrams;
+        try
+        {
+            selectedDiagrams = WorkflowSelection.FilterDiagrams(analysis.Diagrams, orchestratorName);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new InvalidOperationException(ex.Message, ex);
+        }
+
         if (selectedDiagrams.Length == 0)
         {
             throw new InvalidOperationException(WorkflowSelection.BuildFilterMismatchMessage(
                 orchestratorName,
-                analysis.Diagrams.Select(diagram => diagram.OrchestratorName)));
+                analysis.Diagrams.Select(diagram => diagram.OrchestratorDisplayName)));
         }
 
         return new SourceWorkflowSelection(config, selectedDiagrams, resolvedOutputDirectory);

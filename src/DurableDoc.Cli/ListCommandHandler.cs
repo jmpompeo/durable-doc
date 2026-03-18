@@ -27,13 +27,22 @@ public static class ListCommandHandler
                 return 1;
             }
 
-            var selected = WorkflowSelection.FilterDiagrams(analysis.Diagrams, orchestratorName);
+            WorkflowDiagram[] selected;
+            try
+            {
+                selected = WorkflowSelection.FilterDiagrams(analysis.Diagrams, orchestratorName);
+            }
+            catch (InvalidOperationException ex)
+            {
+                context.Fail(ex.Message);
+                return 1;
+            }
 
             if (selected.Length == 0)
             {
                 context.Fail(WorkflowSelection.BuildFilterMismatchMessage(
                     orchestratorName,
-                    analysis.Diagrams.Select(diagram => diagram.OrchestratorName)));
+                    analysis.Diagrams.Select(diagram => diagram.OrchestratorDisplayName)));
                 return 1;
             }
 
@@ -48,7 +57,7 @@ public static class ListCommandHandler
                 var subOrchestrators = GetLabels(diagram, WorkflowNodeType.SubOrchestrator, WorkflowNodeType.RetrySubOrchestrator);
                 var externalEvents = GetLabels(diagram, WorkflowNodeType.ExternalEvent);
 
-                context.Info($"{diagram.OrchestratorName} | {diagram.SourceFile ?? "(unknown source)"} | activities={FormatList(activities)} | subOrchestrators={FormatList(subOrchestrators)} | externalEvents={FormatList(externalEvents)}");
+                context.Info($"{diagram.OrchestratorDisplayName} | {diagram.SourceFile ?? "(unknown source)"} | activities={FormatList(activities)} | subOrchestrators={FormatList(subOrchestrators)} | externalEvents={FormatList(externalEvents)}");
 
                 if (context.Verbosity == CliVerbosity.Detailed)
                 {
