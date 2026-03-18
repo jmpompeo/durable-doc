@@ -22,3 +22,19 @@ public sealed class TaskOrchestrationContext
 
     public Task CreateTimer(DateTime fireAt, CancellationToken cancellationToken) => Task.CompletedTask;
 }
+
+public sealed class TaskActivityContext;
+
+[AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
+public sealed class FunctionAttribute : Attribute
+{
+    public FunctionAttribute(string name)
+    {
+        Name = name;
+    }
+
+    public string Name { get; }
+}
+
+[AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false)]
+public sealed class ActivityTriggerAttribute : Attribute;

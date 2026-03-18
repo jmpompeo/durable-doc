@@ -51,6 +51,88 @@ public class SmokeTests
                 "SendWelcomeEmail",
             ],
             mainDiagram.Nodes.Select(node => node.DisplayLabel).ToArray());
+
+        Assert.Equal(
+            "Loads the submitted application so onboarding can use the customer and product details.",
+            mainDiagram.Nodes.Single(node => node.DisplayLabel == "LoadApplication").DocumentationSummary);
+        Assert.Equal(
+            "Collects the core identity documents needed before the account can be opened.",
+            mainDiagram.Nodes.Single(node => node.DisplayLabel == "CollectDocumentsSubOrchestrator").DocumentationSummary);
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_UsesFunctionAttributeName_WhenResolvingActivityDocumentationSummary()
+    {
+        using var fixture = new TempSourceFixture("""
+using System;
+using System.Threading.Tasks;
+
+public class Demo
+{
+    [OrchestrationTrigger]
+    public async Task Run(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ChargeCard");
+    }
+
+    /// <summary>
+    /// Charges the customer's payment method before fulfillment begins.
+    /// </summary>
+    [Function("ChargeCard")]
+    public static Task CapturePayment([ActivityTrigger] TaskActivityContext ctx)
+        => Task.CompletedTask;
+}
+
+public sealed class FunctionAttribute : Attribute
+{
+    public FunctionAttribute(string name) { }
+}
+
+public sealed class ActivityTriggerAttribute : Attribute { }
+
+public sealed class TaskActivityContext { }
+""");
+
+        var analyzer = new WorkflowAnalyzer();
+
+        var diagrams = await analyzer.AnalyzeAsync(fixture.DirectoryPath);
+
+        var diagram = Assert.Single(diagrams);
+        Assert.Equal(
+            "Charges the customer's payment method before fulfillment begins.",
+            diagram.Nodes.Single(node => node.DisplayLabel == "ChargeCard").DocumentationSummary);
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_LeavesDocumentationSummaryEmpty_ForNonLiteralDurableTargetNames()
+    {
+        using var fixture = new TempSourceFixture("""
+using System.Threading.Tasks;
+
+public class Demo
+{
+    [OrchestrationTrigger]
+    public async Task Run(TaskOrchestrationContext ctx)
+    {
+        var activityName = ResolveActivityName();
+        await ctx.CallActivityAsync(activityName);
+    }
+
+    /// <summary>
+    /// This comment should not be matched when the activity name is dynamic.
+    /// </summary>
+    public static Task ValidateOrder() => Task.CompletedTask;
+
+    private static string ResolveActivityName() => "ValidateOrder";
+}
+""");
+
+        var analyzer = new WorkflowAnalyzer();
+
+        var diagrams = await analyzer.AnalyzeAsync(fixture.DirectoryPath);
+
+        var diagram = Assert.Single(diagrams);
+        Assert.Null(diagram.Nodes.Single(node => node.NodeType == WorkflowNodeType.Activity).DocumentationSummary);
     }
 
     [Fact]

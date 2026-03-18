@@ -252,8 +252,9 @@ p {
 }
 
 h1 {
-  font-size: clamp(2rem, 3vw, 3rem);
-  line-height: 0.96;
+  font-size: clamp(1.9rem, 2.8vw, 2.8rem);
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .lede,
@@ -537,6 +538,20 @@ select {
   font-size: 0.82rem;
 }
 
+button.legend-item {
+  cursor: pointer;
+}
+
+.legend-item.active,
+button.legend-item:hover,
+button.legend-item:focus-visible {
+  border-color: rgba(13, 148, 136, 0.36);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-weight: 700;
+  outline: none;
+}
+
 .diagram-grid {
   display: grid;
   gap: 16px;
@@ -591,13 +606,13 @@ select {
 
 .flow-step {
   position: relative;
-  padding-left: 26px;
+  padding-left: calc(26px + var(--depth, 0) * 24px);
 }
 
 .flow-step::before {
   content: "";
   position: absolute;
-  left: 8px;
+  left: calc(8px + var(--depth, 0) * 24px);
   top: -12px;
   bottom: -18px;
   width: 2px;
@@ -893,6 +908,7 @@ internal static class DashboardScriptTemplate
     selectedOrchestrator: '',
     selectedMode: '',
     selectedNodeId: '',
+    legendFilterKind: '',
     compareMode: false,
     stageCollapsed: false,
     lastSerialized: '',
@@ -943,7 +959,9 @@ internal static class DashboardScriptTemplate
       return;
     }
 
-    state.selectedNodeId = startNode.id;
+    state.selectedNodeId = isBusinessArtifact(selected)
+      ? getVisibleBusinessFlowItems(buildBusinessFlow(selected))[0]?.key || ''
+      : createFlatNodeKey(selected, startNode.id);
     renderSelection();
     writeUrlState('push');
   });
@@ -1157,12 +1175,22 @@ internal static class DashboardScriptTemplate
       return;
     }
 
+    if (isBusinessArtifact(artifact)) {
+      const visibleItems = getVisibleBusinessFlowItems(buildBusinessFlow(artifact));
+      if (state.selectedNodeId && visibleItems.some(function (item) { return item.key === state.selectedNodeId; })) {
+        return;
+      }
+
+      state.selectedNodeId = visibleItems[0] ? visibleItems[0].key : '';
+      return;
+    }
+
     if (state.selectedNodeId && getNodeById(artifact, state.selectedNodeId)) {
       return;
     }
 
     const startNode = getStartNode(artifact);
-    state.selectedNodeId = startNode ? startNode.id : '';
+    state.selectedNodeId = startNode ? createFlatNodeKey(artifact, startNode.id) : '';
   }
 
   function renderResults() {
@@ -1241,6 +1269,9 @@ internal static class DashboardScriptTemplate
 
     modeEl.textContent = selected.mode + ' view';
     titleEl.textContent = group.orchestratorName;
+    if (!isBusinessArtifact(selected)) {
+      state.legendFilterKind = '';
+    }
     renderModeSwitcher(group);
     renderSummary(selected);
     renderLegend(selected);
@@ -1297,22 +1328,57 @@ internal static class DashboardScriptTemplate
       .map(function (node) { return String(node.nodeType || '').toLowerCase(); })
       .filter(function (value, index, all) { return value && all.indexOf(value) === index; });
 
-    legendEl.innerHTML = kinds.map(function (kind) {
-      return '<span class="legend-item" data-kind="' + escapeHtml(kind) + '">' + escapeHtml(formatNodeType(kind)) + '</span>';
-    }).join('');
+    if (!isBusinessArtifact(selected)) {
+      legendEl.innerHTML = kinds.map(function (kind) {
+        return '<span class="legend-item" data-kind="' + escapeHtml(kind) + '">' + escapeHtml(formatNodeType(kind)) + '</span>';
+      }).join('');
+      return;
+    }
+
+    if (state.legendFilterKind && kinds.indexOf(state.legendFilterKind) < 0) {
+      state.legendFilterKind = '';
+    }
+
+    legendEl.innerHTML = '';
+    kinds.forEach(function (kind) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'legend-item';
+      button.dataset.kind = kind;
+      button.textContent = formatNodeType(kind);
+      if (kind === state.legendFilterKind) {
+        button.classList.add('active');
+      }
+
+      button.addEventListener('click', function () {
+        state.legendFilterKind = state.legendFilterKind === kind ? '' : kind;
+        ensureSelectedNode();
+        renderSelection();
+        writeUrlState('push');
+      });
+
+      legendEl.appendChild(button);
+    });
+  }
+
+  function isBusinessArtifact(artifact) {
+    return !!artifact && String(artifact.mode || '').toLowerCase() === 'business';
   }
 
   function renderInspector(selected) {
     const graph = buildGraph(selected);
-    const selectedNode = state.selectedNodeId ? graph.byId[state.selectedNodeId] : null;
+    const selectedContext = getSelectedNodeContext(selected);
+    const selectedNode = selectedContext ? selectedContext.node : null;
 
-    const details = [
-      ['Generated', new Date(selected.generatedAt).toLocaleString()],
-      ['Source project', selected.sourceProjectPath || 'Unknown'],
-      ['Source file', selected.sourceFile || 'Unknown'],
-      ['Artifact file', selected.mermaidFileName || 'Unknown'],
-      ['Primary path', graph.nodes.map(function (node) { return node.displayLabel || node.name || node.id; }).join(' -> ')]
-    ];
+    const details = isBusinessArtifact(selected)
+      ? buildBusinessDetails(selected)
+      : [
+          ['Generated', new Date(selected.generatedAt).toLocaleString()],
+          ['Source project', selected.sourceProjectPath || 'Unknown'],
+          ['Source file', selected.sourceFile || 'Unknown'],
+          ['Artifact file', selected.mermaidFileName || 'Unknown'],
+          ['Primary path', graph.nodes.map(function (node) { return node.displayLabel || node.name || node.id; }).join(' -> ')]
+        ];
 
     detailsEl.innerHTML = details.map(function (entry) {
       return '<div class="detail"><strong>' + escapeHtml(entry[0]) + '</strong><div class="detail-value">' + escapeHtml(entry[1]) + '</div></div>';
@@ -1325,24 +1391,44 @@ internal static class DashboardScriptTemplate
 
     if (!selectedNode) {
       nodeDetailsEl.className = 'node-details empty';
-      nodeDetailsEl.textContent = 'Select a step to inspect its incoming and outgoing flow.';
+      nodeDetailsEl.textContent = isBusinessArtifact(selected)
+        ? 'Select a stage to inspect its incoming and outgoing flow.'
+        : 'Select a step to inspect its incoming and outgoing flow.';
       return;
     }
 
-    const incoming = (graph.incoming[selectedNode.id] || []).map(function (edge) {
-      return describeEdge(graph, edge, 'from');
+    const selectedGraph = selectedContext ? selectedContext.graph : graph;
+    const incoming = (selectedGraph.incoming[selectedNode.id] || []).map(function (edge) {
+      return describeEdge(selectedGraph, edge, 'from');
     });
-    const outgoing = (graph.outgoing[selectedNode.id] || []).map(function (edge) {
-      return describeEdge(graph, edge, 'to');
+    const outgoing = (selectedGraph.outgoing[selectedNode.id] || []).map(function (edge) {
+      return describeEdge(selectedGraph, edge, 'to');
     });
 
     nodeDetailsEl.className = 'node-details';
     nodeDetailsEl.innerHTML =
-      '<div class="node-panel"><strong>Step</strong><div class="detail-value">' + escapeHtml(selectedNode.displayLabel || selectedNode.name || selectedNode.id) + '</div></div>' +
+      '<div class="node-panel"><strong>' + escapeHtml(isBusinessArtifact(selected) ? 'Stage' : 'Step') + '</strong><div class="detail-value">' + escapeHtml(selectedNode.displayLabel || selectedNode.name || selectedNode.id) + '</div></div>' +
       '<div class="node-panel"><strong>Type</strong><div class="detail-value">' + escapeHtml(formatNodeType(selectedNode.nodeType)) + '</div></div>' +
+      '<div class="node-panel"><strong>XML summary</strong><div class="detail-value">' + escapeHtml(selectedNode.documentationSummary || 'No XML summary found.') + '</div></div>' +
       '<div class="node-panel"><strong>Source line</strong><div class="detail-value">' + escapeHtml(selectedNode.lineNumber ? String(selectedNode.lineNumber) : 'Unknown') + '</div></div>' +
       '<div class="node-panel"><strong>Incoming</strong><div class="node-list">' + renderNodeList(incoming, 'Start of workflow') + '</div></div>' +
       '<div class="node-panel"><strong>Outgoing</strong><div class="node-list">' + renderNodeList(outgoing, 'End of workflow') + '</div></div>';
+  }
+
+  function buildBusinessDetails(selected) {
+    const flow = buildBusinessFlow(selected);
+    const visibleItems = getVisibleBusinessFlowItems(flow);
+    const selectedIndex = visibleItems.findIndex(function (item) { return item.key === state.selectedNodeId; });
+    const selectedItem = selectedIndex >= 0 ? visibleItems[selectedIndex] : null;
+    const previousItem = selectedIndex > 0 ? visibleItems[selectedIndex - 1] : null;
+    const nextItem = selectedIndex >= 0 && selectedIndex < visibleItems.length - 1 ? visibleItems[selectedIndex + 1] : null;
+
+    return [
+      ['Highlighted stage', selectedItem ? getNodeLabel(selectedItem.node) : 'None'],
+      ['Previous stage', previousItem ? getNodeLabel(previousItem.node) : 'None'],
+      ['Next stage', nextItem ? getNodeLabel(nextItem.node) : 'None'],
+      ['XML summary', selectedItem && selectedItem.node.documentationSummary ? selectedItem.node.documentationSummary : 'No XML summary found.']
+    ];
   }
 
   function renderDiagrams(group, selected) {
@@ -1373,9 +1459,15 @@ internal static class DashboardScriptTemplate
   }
 
   function renderFlowStage(container, artifact) {
+    if (isBusinessArtifact(artifact)) {
+      renderBusinessFlowStage(container, artifact);
+      return;
+    }
+
     const graph = buildGraph(artifact);
-    const selection = graph.byId[state.selectedNodeId] ? state.selectedNodeId : '';
-    const pathSets = selection ? tracePath(graph, selection) : { incoming: {}, outgoing: {} };
+    const selection = getFlatNodeId(state.selectedNodeId);
+    const hasSelection = !!selection && !!graph.byId[selection];
+    const pathSets = hasSelection ? tracePath(graph, selection) : { incoming: {}, outgoing: {} };
     const query = nodeSearchEl.value.trim().toLowerCase();
 
     const list = document.createElement('ol');
@@ -1384,15 +1476,17 @@ internal static class DashboardScriptTemplate
     graph.nodes.forEach(function (node, index) {
       const item = document.createElement('li');
       item.className = 'flow-step';
+      item.style.setProperty('--depth', '0');
 
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'step-button';
       button.dataset.nodeId = node.id;
 
-      const isSelected = node.id === selection;
-      const isRelated = !isSelected && (pathSets.incoming[node.id] || pathSets.outgoing[node.id]);
-      const isDimmed = !!selection && !isSelected && !isRelated;
+      const nodeKey = createFlatNodeKey(artifact, node.id);
+      const isSelected = nodeKey === state.selectedNodeId;
+      const isRelated = !isSelected && hasSelection && (pathSets.incoming[node.id] || pathSets.outgoing[node.id]);
+      const isDimmed = hasSelection && !isSelected && !isRelated;
       const isMatch = query && matchesNode(node, query);
 
       if (isSelected) {
@@ -1416,7 +1510,7 @@ internal static class DashboardScriptTemplate
           '<div class="step-subheading">' +
             '<span class="step-index">' + escapeHtml(String(index + 1)) + '</span>' +
             '<div>' +
-              '<div class="step-title">' + escapeHtml(node.displayLabel || node.name || node.id) + '</div>' +
+              '<div class="step-title">' + escapeHtml(getNodeLabel(node)) + '</div>' +
               '<div class="step-meta">' + escapeHtml(node.name && node.name !== node.displayLabel ? node.name : '') + '</div>' +
             '</div>' +
           '</div>' +
@@ -1429,7 +1523,7 @@ internal static class DashboardScriptTemplate
         '<div class="edge-list">' + renderEdgeChips(graph, outgoing) + '</div>';
 
       button.addEventListener('click', function () {
-        state.selectedNodeId = node.id;
+        state.selectedNodeId = nodeKey;
         renderSelection();
         writeUrlState('push');
         window.requestAnimationFrame(function () {
@@ -1443,6 +1537,251 @@ internal static class DashboardScriptTemplate
 
     container.innerHTML = '';
     container.appendChild(list);
+  }
+
+  function renderBusinessFlowStage(container, artifact) {
+    const flow = buildBusinessFlow(artifact);
+    const visibleItems = getVisibleBusinessFlowItems(flow);
+    const query = nodeSearchEl.value.trim().toLowerCase();
+
+    const list = document.createElement('ol');
+    list.className = 'flow-list';
+
+    visibleItems.forEach(function (flowItem, index) {
+      const node = flowItem.node;
+      const incoming = flowItem.graph.incoming[node.id] || [];
+      const outgoing = flowItem.graph.outgoing[node.id] || [];
+      const item = document.createElement('li');
+      item.className = 'flow-step';
+      item.style.setProperty('--depth', String(flowItem.depth));
+
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'step-button';
+      button.dataset.nodeId = node.id;
+
+      const isSelected = flowItem.key === state.selectedNodeId;
+      const isMatch = query && matchesNode(node, query);
+
+      if (isSelected) {
+        button.classList.add('active');
+      }
+      if (isMatch) {
+        button.classList.add('match');
+      }
+
+      button.innerHTML =
+        '<div class="step-heading">' +
+          '<div class="step-subheading">' +
+            '<span class="step-index">' + escapeHtml(String(index + 1)) + '</span>' +
+            '<div>' +
+              '<div class="step-title">' + escapeHtml(getNodeLabel(node)) + '</div>' +
+              '<div class="step-meta">' + escapeHtml(getBusinessStepMeta(flowItem)) + '</div>' +
+            '</div>' +
+          '</div>' +
+          '<span class="step-type" data-kind="' + escapeHtml(String(node.nodeType || '').toLowerCase()) + '">' + escapeHtml(formatNodeType(node.nodeType)) + '</span>' +
+        '</div>' +
+        '<div class="step-subheading">' +
+          '<span class="step-note">' + escapeHtml(describeConnectivity(incoming.length, outgoing.length, index === 0, index === visibleItems.length - 1)) + '</span>' +
+          '<span class="step-meta">' + escapeHtml(node.documentationSummary ? 'XML summary available' : 'No XML summary') + '</span>' +
+        '</div>' +
+        '<div class="edge-list">' + renderEdgeChips(flowItem.graph, outgoing) + '</div>';
+
+      button.addEventListener('click', function () {
+        state.selectedNodeId = flowItem.key;
+        renderSelection();
+        writeUrlState('push');
+        window.requestAnimationFrame(function () {
+          button.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        });
+      });
+
+      item.appendChild(button);
+      list.appendChild(item);
+    });
+
+    container.innerHTML = '';
+    container.appendChild(list);
+  }
+
+  function buildBusinessFlow(artifact) {
+    const items = [];
+
+    appendArtifact(artifact, 0, null, [artifact.orchestratorName], new Set());
+
+    const byKey = {};
+    items.forEach(function (item) {
+      byKey[item.key] = item;
+    });
+
+    return {
+      items: items,
+      byKey: byKey
+    };
+
+    function appendArtifact(currentArtifact, baseDepth, parentKey, pathTokens, activeOrchestrators) {
+      const orchestratorKey = String(currentArtifact.orchestratorName || '').toLowerCase();
+      if (activeOrchestrators.has(orchestratorKey)) {
+        return;
+      }
+
+      activeOrchestrators.add(orchestratorKey);
+      const graph = buildGraph(currentArtifact);
+      const startNode = getStartNode(currentArtifact);
+      const startKey = startNode ? createNestedNodeKey(pathTokens, startNode.id) : '';
+
+      graph.nodes.forEach(function (node) {
+        const isStart = !!startNode && node.id === startNode.id;
+        if (!parentKey && !isStart) {
+          return;
+        }
+        if (parentKey && isStart) {
+          return;
+        }
+
+        const nodeKey = createNestedNodeKey(pathTokens, node.id);
+        const depth = parentKey ? baseDepth : 0;
+        const effectiveParentKey = parentKey || null;
+
+        items.push({
+          key: nodeKey,
+          parentKey: effectiveParentKey,
+          depth: depth,
+          artifact: currentArtifact,
+          graph: graph,
+          node: node
+        });
+
+        if (!parentKey && isStart) {
+          appendRootChildren(nodeKey);
+        }
+
+        if (isSubOrchestratorNode(node)) {
+          const childArtifact = findChildBusinessArtifact(node);
+          if (childArtifact) {
+            appendArtifact(
+              childArtifact,
+              depth + 1,
+              nodeKey,
+              pathTokens.concat([node.id + ':' + childArtifact.orchestratorName]),
+              new Set(activeOrchestrators));
+          }
+        }
+      });
+
+      activeOrchestrators.delete(orchestratorKey);
+
+      function appendRootChildren(rootKey) {
+        graph.nodes.forEach(function (node) {
+          if (startNode && node.id === startNode.id) {
+            return;
+          }
+
+          const nodeKey = createNestedNodeKey(pathTokens, node.id);
+          items.push({
+            key: nodeKey,
+            parentKey: rootKey,
+            depth: 1,
+            artifact: currentArtifact,
+            graph: graph,
+            node: node
+          });
+
+          if (isSubOrchestratorNode(node)) {
+            const childArtifact = findChildBusinessArtifact(node);
+            if (childArtifact) {
+              appendArtifact(
+                childArtifact,
+                2,
+                nodeKey,
+                pathTokens.concat([node.id + ':' + childArtifact.orchestratorName]),
+                new Set(activeOrchestrators));
+            }
+          }
+        });
+      }
+    }
+  }
+
+  function getVisibleBusinessFlowItems(flow) {
+    if (!state.legendFilterKind) {
+      return flow.items;
+    }
+
+    const visibleKeys = {};
+    flow.items.forEach(function (item) {
+      if (String(item.node.nodeType || '').toLowerCase() !== state.legendFilterKind) {
+        return;
+      }
+
+      let current = item;
+      while (current) {
+        visibleKeys[current.key] = true;
+        current = current.parentKey ? flow.byKey[current.parentKey] : null;
+      }
+    });
+
+    return flow.items.filter(function (item) {
+      return !!visibleKeys[item.key];
+    });
+  }
+
+  function findChildBusinessArtifact(node) {
+    const childName = node.name || node.displayLabel;
+    if (!childName) {
+      return null;
+    }
+
+    const childGroup = state.groups.find(function (group) {
+      return group.orchestratorName === childName;
+    });
+
+    return childGroup ? (getMode(childGroup, 'business') || null) : null;
+  }
+
+  function isSubOrchestratorNode(node) {
+    const kind = String(node.nodeType || '').toLowerCase();
+    return kind === 'suborchestrator' || kind === 'retrysuborchestrator';
+  }
+
+  function createNestedNodeKey(pathTokens, nodeId) {
+    return pathTokens.join('>') + '|' + nodeId;
+  }
+
+  function createFlatNodeKey(artifact, nodeId) {
+    return String(artifact.orchestratorName || '') + '|' + nodeId;
+  }
+
+  function getFlatNodeId(nodeKey) {
+    const separatorIndex = String(nodeKey || '').lastIndexOf('|');
+    return separatorIndex >= 0 ? String(nodeKey).slice(separatorIndex + 1) : '';
+  }
+
+  function getSelectedNodeContext(selected) {
+    if (isBusinessArtifact(selected)) {
+      const flow = buildBusinessFlow(selected);
+      const item = flow.byKey[state.selectedNodeId] || null;
+      return item ? { node: item.node, graph: item.graph, item: item } : null;
+    }
+
+    const graph = buildGraph(selected);
+    const nodeId = getFlatNodeId(state.selectedNodeId);
+    const node = nodeId ? graph.byId[nodeId] : null;
+    return node ? { node: node, graph: graph, item: null } : null;
+  }
+
+  function getNodeLabel(node) {
+    return node.displayLabel || node.name || node.id;
+  }
+
+  function getBusinessStepMeta(flowItem) {
+    if (flowItem.depth === 0) {
+      return 'Workflow root';
+    }
+
+    return flowItem.artifact.orchestratorName === getSelectedArtifact().orchestratorName
+      ? 'Main orchestration'
+      : 'Nested under ' + flowItem.artifact.orchestratorName;
   }
 
   function handleGlobalKeydown(event) {
@@ -1537,6 +1876,22 @@ internal static class DashboardScriptTemplate
       return;
     }
 
+    if (isBusinessArtifact(selected)) {
+      const businessMatch = getVisibleBusinessFlowItems(buildBusinessFlow(selected)).find(function (item) {
+        return matchesNode(item.node, query);
+      });
+
+      if (!businessMatch) {
+        updateNodeSearchStatus(selected);
+        return;
+      }
+
+      state.selectedNodeId = businessMatch.key;
+      renderSelection();
+      writeUrlState(pushHistory ? 'push' : 'replace');
+      return;
+    }
+
     const match = buildGraph(selected).nodes.find(function (node) {
       return matchesNode(node, query);
     });
@@ -1546,7 +1901,7 @@ internal static class DashboardScriptTemplate
       return;
     }
 
-    state.selectedNodeId = match.id;
+    state.selectedNodeId = createFlatNodeKey(selected, match.id);
     renderSelection();
     writeUrlState(pushHistory ? 'push' : 'replace');
   }
@@ -1554,19 +1909,25 @@ internal static class DashboardScriptTemplate
   function updateNodeSearchStatus(selected) {
     const query = nodeSearchEl.value.trim().toLowerCase();
     if (!query) {
-      nodeSearchStatusEl.textContent = 'Search within the current diagram to jump directly to a step.';
+      nodeSearchStatusEl.textContent = isBusinessArtifact(selected)
+        ? 'Search within the current business flow to jump directly to a stage.'
+        : 'Search within the current diagram to jump directly to a step.';
       return;
     }
 
-    const matches = buildGraph(selected).nodes.filter(function (node) {
-      return matchesNode(node, query);
-    });
+    const matches = isBusinessArtifact(selected)
+      ? getVisibleBusinessFlowItems(buildBusinessFlow(selected)).filter(function (item) {
+          return matchesNode(item.node, query);
+        })
+      : buildGraph(selected).nodes.filter(function (node) {
+          return matchesNode(node, query);
+        });
 
     nodeSearchStatusEl.textContent = matches.length === 0
-      ? 'No matching steps in this view.'
+      ? (isBusinessArtifact(selected) ? 'No matching stages in this view.' : 'No matching steps in this view.')
       : matches.length === 1
-        ? '1 matching step. Press Enter to jump.'
-        : matches.length + ' matching steps. Press Enter to jump to the first.';
+        ? (isBusinessArtifact(selected) ? '1 matching stage. Press Enter to jump.' : '1 matching step. Press Enter to jump.')
+        : matches.length + (isBusinessArtifact(selected) ? ' matching stages. Press Enter to jump to the first.' : ' matching steps. Press Enter to jump to the first.');
   }
 
   function buildGraph(artifact) {
@@ -1742,7 +2103,7 @@ internal static class DashboardScriptTemplate
   }
 
   function getNodeById(artifact, nodeId) {
-    return buildGraph(artifact).byId[nodeId] || null;
+    return buildGraph(artifact).byId[getFlatNodeId(nodeId)] || null;
   }
 
   function matchesNode(node, query) {
@@ -1752,6 +2113,7 @@ internal static class DashboardScriptTemplate
       node.businessName,
       node.businessGroup,
       node.nodeType,
+      node.documentationSummary,
       node.notes,
       node.retryHint
     ].join(' ').toLowerCase();
