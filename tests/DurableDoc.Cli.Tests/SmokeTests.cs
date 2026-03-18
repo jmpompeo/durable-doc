@@ -32,13 +32,18 @@ public class Demo
         Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "mermaid.min.js")));
         Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "dashboard.css")));
         Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "dashboard.js")));
+        Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "diagram.js")));
         Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "dashboard-data.json")));
+        Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "diagram.html")));
         Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "dashboard.css")));
         Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "dashboard.js")));
+        Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "diagram.js")));
         Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "dashboard-data.json")));
+        Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "diagram.html")));
 
         var mermaid = File.ReadAllText(Directory.EnumerateFiles(fixture.OutputDirectory, "*.mmd").Single());
         var dashboard = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "index.html"));
+        var diagramHtml = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "diagram.html"));
         var bundle = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "mermaid.min.js"));
         var artifact = File.ReadAllText(Directory.EnumerateFiles(fixture.OutputDirectory, "*.diagram.json").Single());
         var dashboardData = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "dashboard-data.json"));
@@ -49,12 +54,18 @@ public class Demo
         Assert.Contains("dashboard-bootstrap", dashboard, StringComparison.Ordinal);
         Assert.Contains("dashboard.js", dashboard, StringComparison.Ordinal);
         Assert.Contains("dashboard.css", dashboard, StringComparison.Ordinal);
+        Assert.Contains("open-rendered-diagram", dashboard, StringComparison.Ordinal);
+        Assert.Contains("diagram.html", dashboard, StringComparison.Ordinal);
         Assert.Contains("\"mode\": \"developer\"", dashboard, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("dashboard-bootstrap", dashboard, StringComparison.Ordinal);
         Assert.Contains("dashboard.js", dashboard, StringComparison.Ordinal);
         Assert.Contains("dashboard.css", dashboard, StringComparison.Ordinal);
+        Assert.Contains("diagram.html", dashboard, StringComparison.Ordinal);
         Assert.DoesNotContain("__PAYLOAD__", dashboard, StringComparison.Ordinal);
         Assert.DoesNotContain("{{payload}}", dashboard, StringComparison.Ordinal);
+        Assert.Contains("dashboard-bootstrap", diagramHtml, StringComparison.Ordinal);
+        Assert.Contains("diagram.js", diagramHtml, StringComparison.Ordinal);
+        Assert.Contains("mermaid.min.js", diagramHtml, StringComparison.Ordinal);
         Assert.Contains(@"source.split(/\r?\n/)", bundle, StringComparison.Ordinal);
         Assert.DoesNotContain(@"<br\\/>", bundle, StringComparison.Ordinal);
         Assert.Contains("\"nodes\": [", artifact, StringComparison.Ordinal);
@@ -357,13 +368,16 @@ public class Demo
         Assert.Contains("Run", dashboard);
         Assert.Contains("mermaid.min.js", dashboard);
         Assert.Contains("dashboard.js", dashboard);
+        Assert.Contains("diagram.html", dashboard);
         Assert.Contains("dashboard.css", dashboard);
         Assert.Contains("dashboard.js", dashboard);
         Assert.Contains("dashboard.css", dashboard);
         Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "mermaid.min.js")));
         Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "dashboard.css")));
         Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "dashboard.js")));
+        Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "diagram.js")));
         Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "dashboard-data.json")));
+        Assert.True(File.Exists(Path.Combine(fixture.OutputDirectory, "diagram.html")));
     }
 
     [Fact]
@@ -618,6 +632,59 @@ public class Demo
         Assert.Contains("\"displayLabel\": \"First\"", dashboard, StringComparison.Ordinal);
         Assert.Contains(@"source.split(/\r?\n/)", bundle, StringComparison.Ordinal);
         Assert.Contains("Press Ctrl+C to stop.", output.ToString(), StringComparison.Ordinal);
+
+        cancellation.Cancel();
+
+        var exitCode = await commandTask;
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(string.Empty, error.ToString());
+    }
+
+    [Fact]
+    public async Task Generate_open_serves_rendered_diagram_viewer_until_cancellation()
+    {
+        using var fixture = new CliFixture(
+            """
+using System.Threading.Tasks;
+
+public class Demo
+{
+    [OrchestrationTrigger]
+    public async Task First(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("ValidateOrder");
+    }
+}
+""");
+
+        var output = new StringWriter();
+        var error = new StringWriter();
+        var context = new DurableDoc.Cli.CliCommandContext(output, error, DurableDoc.Cli.CliVerbosity.Normal, ci: false);
+        using var cancellation = new CancellationTokenSource();
+
+        var commandTask = DurableDoc.Cli.GenerateCommandHandler.ExecuteAsync(
+            fixture.SourceDirectory,
+            fixture.OutputDirectory,
+            orchestratorName: null,
+            mode: "developer",
+            configPath: null,
+            strict: false,
+            context: context,
+            openDashboard: true,
+            browserLauncher: (_, _) => Task.CompletedTask,
+            cancellationToken: cancellation.Token);
+
+        var previewUri = await WaitForPreviewUriAsync(output, commandTask);
+        var viewerUri = BuildViewerUri(previewUri, "Demo.First", "developer");
+
+        using var client = new HttpClient();
+        var viewer = await client.GetStringAsync(viewerUri);
+
+        Assert.Contains("Demo.First", viewer, StringComparison.Ordinal);
+        Assert.Contains("\"mode\": \"developer\"", viewer, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Back to dashboard", viewer, StringComparison.Ordinal);
+        Assert.Contains("diagram.js", viewer, StringComparison.Ordinal);
 
         cancellation.Cancel();
 
@@ -1404,5 +1471,12 @@ public class Demo
         }
 
         return null;
+    }
+
+    private static Uri BuildViewerUri(Uri previewUri, string orchestrator, string mode)
+    {
+        var builder = new UriBuilder(new Uri(previewUri, "diagram.html"));
+        builder.Query = $"orchestrator={Uri.EscapeDataString(orchestrator)}&mode={Uri.EscapeDataString(mode)}";
+        return builder.Uri;
     }
 }

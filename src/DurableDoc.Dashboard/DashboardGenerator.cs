@@ -29,8 +29,10 @@ public static class DashboardGenerator
 {
     internal const string MermaidBundleFileName = "mermaid.min.js";
     internal const string DashboardHtmlFileName = "index.html";
+    internal const string DiagramHtmlFileName = "diagram.html";
     internal const string DashboardCssFileName = "dashboard.css";
     internal const string DashboardScriptFileName = "dashboard.js";
+    internal const string DiagramScriptFileName = "diagram.js";
     internal const string DashboardDataFileName = "dashboard-data.json";
 
     public static DashboardBuildResult WriteArtifactsAndBuild(string outputDirectory, IEnumerable<GeneratedDiagramArtifact> diagrams)
@@ -110,6 +112,7 @@ public static class DashboardGenerator
         File.WriteAllText(Path.Combine(outputDirectory, MermaidBundleFileName), MermaidCompatibilityBundle.Render());
         File.WriteAllText(Path.Combine(outputDirectory, DashboardCssFileName), DashboardCssTemplate.Render());
         File.WriteAllText(Path.Combine(outputDirectory, DashboardScriptFileName), DashboardScriptTemplate.Render());
+        File.WriteAllText(Path.Combine(outputDirectory, DiagramScriptFileName), DiagramViewerScriptTemplate.Render());
         File.WriteAllText(Path.Combine(outputDirectory, DashboardDataFileName), payload);
 
         var dashboardPath = Path.Combine(outputDirectory, DashboardHtmlFileName);
@@ -120,6 +123,14 @@ public static class DashboardGenerator
                 MermaidBundleFileName,
                 DashboardCssFileName,
                 DashboardScriptFileName));
+
+        File.WriteAllText(
+            Path.Combine(outputDirectory, DiagramHtmlFileName),
+            DiagramViewerHtmlTemplate.Render(
+                payload,
+                MermaidBundleFileName,
+                DashboardCssFileName,
+                DiagramScriptFileName));
 
         return new DashboardBuildResult(dashboardPath, diagrams.Count);
     }

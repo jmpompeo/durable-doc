@@ -108,6 +108,7 @@ internal static class DashboardHtmlTemplate
 
         <details class="source-panel">
           <summary>Mermaid source</summary>
+          <a id="open-rendered-diagram" class="viewer-link disabled" href="diagram.html" target="_blank" rel="noopener noreferrer" aria-disabled="true">Open rendered diagram</a>
           <pre id="source" class="source"></pre>
         </details>
       </aside>
@@ -124,6 +125,54 @@ internal static class DashboardHtmlTemplate
             .Replace("__MERMAID_BUNDLE__", mermaidBundleFileName, StringComparison.Ordinal)
             .Replace("__DASHBOARD_CSS__", dashboardCssFileName, StringComparison.Ordinal)
             .Replace("__DASHBOARD_SCRIPT__", dashboardScriptFileName, StringComparison.Ordinal);
+    }
+}
+
+internal static class DiagramViewerHtmlTemplate
+{
+    public static string Render(
+        string payload,
+        string mermaidBundleFileName,
+        string dashboardCssFileName,
+        string diagramScriptFileName)
+    {
+        return """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>durable-doc diagram viewer</title>
+  <link rel="stylesheet" href="__DASHBOARD_CSS__">
+</head>
+<body class="diagram-viewer-body">
+  <main class="diagram-viewer-shell">
+    <section class="panel diagram-viewer-panel">
+      <div class="diagram-viewer-header">
+        <div>
+          <a id="viewer-back-link" class="viewer-back-link" href="index.html">Back to dashboard</a>
+          <div id="viewer-mode" class="badge">No selection</div>
+          <h1 id="viewer-title">Rendered diagram</h1>
+        </div>
+        <div id="viewer-refresh" class="refresh-indicator">Static snapshot</div>
+      </div>
+      <p id="viewer-meta" class="meta">Select an orchestrator from the dashboard to open a rendered diagram.</p>
+      <div id="viewer-stage" class="diagram-viewer-stage">
+        <div class="empty">Rendered diagram will appear here.</div>
+      </div>
+    </section>
+  </main>
+
+  <script id="dashboard-bootstrap" type="application/json">__PAYLOAD__</script>
+  <script src="__MERMAID_BUNDLE__"></script>
+  <script src="__DIAGRAM_SCRIPT__"></script>
+</body>
+</html>
+"""
+            .Replace("__PAYLOAD__", payload, StringComparison.Ordinal)
+            .Replace("__MERMAID_BUNDLE__", mermaidBundleFileName, StringComparison.Ordinal)
+            .Replace("__DASHBOARD_CSS__", dashboardCssFileName, StringComparison.Ordinal)
+            .Replace("__DIAGRAM_SCRIPT__", diagramScriptFileName, StringComparison.Ordinal);
     }
 }
 
@@ -831,6 +880,22 @@ button.legend-item:focus-visible {
   font-weight: 700;
 }
 
+.viewer-link,
+.viewer-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--accent-strong);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.viewer-link.disabled {
+  color: var(--muted);
+  pointer-events: none;
+}
+
 .source {
   margin: 12px 0 0;
   white-space: pre-wrap;
@@ -843,6 +908,41 @@ button.legend-item:focus-visible {
   overflow: auto;
   font-family: "SFMono-Regular", Consolas, monospace;
   font-size: 0.9rem;
+}
+
+.diagram-viewer-body {
+  min-height: 100vh;
+}
+
+.diagram-viewer-shell {
+  min-height: 100vh;
+  padding: 22px;
+}
+
+.diagram-viewer-panel {
+  min-height: calc(100vh - 44px);
+  padding: 24px;
+  display: grid;
+  gap: 18px;
+}
+
+.diagram-viewer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.diagram-viewer-stage {
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: #fbf7f1;
+  padding: 18px;
+  min-height: 420px;
+}
+
+.diagram-render {
+  white-space: pre-wrap;
 }
 
 @media (max-width: 1200px) {
@@ -862,6 +962,10 @@ button.legend-item:focus-visible {
 
   .diagram-grid.compare {
     grid-template-columns: 1fr;
+  }
+
+  .diagram-viewer-header {
+    flex-direction: column;
   }
 }
 """;
@@ -884,6 +988,7 @@ internal static class DashboardScriptTemplate
   const detailsEl = document.getElementById('details');
   const warningsEl = document.getElementById('warnings');
   const sourceEl = document.getElementById('source');
+  const openRenderedDiagramEl = document.getElementById('open-rendered-diagram');
   const diagramGridEl = document.getElementById('diagram-grid');
   const modeSwitcherEl = document.getElementById('mode-switcher');
   const toggleStageEl = document.getElementById('toggle-stage');
@@ -1252,6 +1357,7 @@ internal static class DashboardScriptTemplate
       detailsEl.innerHTML = '';
       warningsEl.innerHTML = '';
       sourceEl.textContent = '';
+      setViewerLink(null);
       modeSwitcherEl.innerHTML = '';
       nodeDetailsEl.className = 'node-details empty';
       nodeDetailsEl.textContent = 'Select a step to inspect its incoming and outgoing flow.';
@@ -1280,6 +1386,7 @@ internal static class DashboardScriptTemplate
     renderInspector(selected);
     renderDiagrams(group, selected);
     sourceEl.textContent = selected.mermaid || '';
+    setViewerLink(selected);
     updateNodeSearchStatus(selected);
   }
 
@@ -2146,6 +2253,176 @@ internal static class DashboardScriptTemplate
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  }
+})();
+""";
+    }
+}
+
+internal static class DiagramViewerScriptTemplate
+{
+    public static string Render()
+    {
+        return """
+(function () {
+  const bootstrapEl = document.getElementById('dashboard-bootstrap');
+  const titleEl = document.getElementById('viewer-title');
+  const modeEl = document.getElementById('viewer-mode');
+  const metaEl = document.getElementById('viewer-meta');
+  const stageEl = document.getElementById('viewer-stage');
+  const backLinkEl = document.getElementById('viewer-back-link');
+  const refreshEl = document.getElementById('viewer-refresh');
+  const refreshMs = 3000;
+
+  const state = {
+    diagrams: readBootstrap(),
+    selectedArtifact: null,
+    lastSerialized: '',
+    hasLiveRefresh: window.location.protocol !== 'file:'
+  };
+
+  if (window.mermaid && typeof window.mermaid.initialize === 'function') {
+    window.mermaid.initialize({ startOnLoad: false, securityLevel: 'loose' });
+  }
+
+  hydrate();
+
+  if (state.hasLiveRefresh) {
+    refreshEl.textContent = 'Polling localhost';
+    window.setInterval(pollForUpdates, refreshMs);
+  }
+
+  function readBootstrap() {
+    try {
+      return JSON.parse(bootstrapEl.textContent || '[]');
+    } catch {
+      return [];
+    }
+  }
+
+  async function pollForUpdates() {
+    try {
+      const response = await fetch('dashboard-data.json?t=' + Date.now(), { cache: 'no-store' });
+      if (!response.ok) {
+        refreshEl.textContent = 'Waiting for localhost refresh';
+        return;
+      }
+
+      const nextDiagrams = await response.json();
+      const serialized = JSON.stringify(nextDiagrams);
+      if (serialized === state.lastSerialized) {
+        refreshEl.textContent = 'Watching localhost';
+        return;
+      }
+
+      state.diagrams = nextDiagrams;
+      hydrate();
+      refreshEl.textContent = 'Updated from localhost';
+    } catch {
+      refreshEl.textContent = 'Static snapshot';
+    }
+  }
+
+  function hydrate() {
+    state.lastSerialized = JSON.stringify(state.diagrams);
+    state.selectedArtifact = resolveSelectedArtifact();
+    renderSelection();
+    normalizeUrl();
+  }
+
+  function resolveSelectedArtifact() {
+    const params = new URLSearchParams(window.location.search);
+    const orchestratorKey = params.get('orchestrator') || '';
+    const requestedMode = params.get('mode') || '';
+
+    if (!orchestratorKey) {
+      return null;
+    }
+
+    const matches = state.diagrams
+      .filter(function (artifact) { return getArtifactOrchestratorKey(artifact) === orchestratorKey; })
+      .sort(function (left, right) {
+        if (left.mode === 'developer') return -1;
+        if (right.mode === 'developer') return 1;
+        return String(left.mode || '').localeCompare(String(right.mode || ''));
+      });
+
+    if (matches.length === 0) {
+      return null;
+    }
+
+    return matches.find(function (artifact) { return artifact.mode === requestedMode; })
+      || matches.find(function (artifact) { return artifact.mode === 'developer'; })
+      || matches[0];
+  }
+
+  function renderSelection() {
+    backLinkEl.href = buildDashboardUrl(state.selectedArtifact);
+
+    if (!state.selectedArtifact) {
+      modeEl.textContent = 'No selection';
+      titleEl.textContent = 'Diagram not found';
+      metaEl.textContent = 'The requested rendered diagram could not be found. Return to the dashboard and choose another artifact.';
+      stageEl.innerHTML = '<div class="empty">No rendered diagram matches the current URL.</div>';
+      return;
+    }
+
+    const artifact = state.selectedArtifact;
+    modeEl.textContent = String(artifact.mode || 'unknown') + ' view';
+    titleEl.textContent = getArtifactOrchestratorLabel(artifact);
+    metaEl.textContent = [
+      artifact.sourceProjectPath || artifact.sourceFile || 'Source unknown',
+      artifact.mermaidFileName || 'Artifact file unknown'
+    ].join(' · ');
+
+    stageEl.innerHTML = '<div id="diagram-render-target" class="diagram-render"></div>';
+
+    const renderTarget = document.getElementById('diagram-render-target');
+    renderTarget.textContent = artifact.mermaid || '';
+    if (window.mermaid && typeof window.mermaid.run === 'function') {
+      window.mermaid.run({ nodes: [renderTarget] });
+    }
+  }
+
+  function normalizeUrl() {
+    if (!state.selectedArtifact) {
+      return;
+    }
+
+    const url = new URL(window.location.href);
+    url.searchParams.set('orchestrator', getArtifactOrchestratorKey(state.selectedArtifact));
+    if (state.selectedArtifact.mode) {
+      url.searchParams.set('mode', state.selectedArtifact.mode);
+    } else {
+      url.searchParams.delete('mode');
+    }
+
+    window.history.replaceState(null, '', url);
+  }
+
+  function buildDashboardUrl(artifact) {
+    const url = new URL('index.html', window.location.href);
+    const params = new URLSearchParams(window.location.search);
+    const orchestratorKey = artifact ? getArtifactOrchestratorKey(artifact) : (params.get('orchestrator') || '');
+    const mode = artifact ? artifact.mode : (params.get('mode') || '');
+
+    if (orchestratorKey) {
+      url.searchParams.set('orchestrator', orchestratorKey);
+    }
+
+    if (mode) {
+      url.searchParams.set('mode', mode);
+    }
+
+    return url.toString();
+  }
+
+  function getArtifactOrchestratorKey(artifact) {
+    return String(artifact.orchestratorKey || artifact.orchestratorDisplayName || artifact.orchestratorName || '');
+  }
+
+  function getArtifactOrchestratorLabel(artifact) {
+    return String(artifact.orchestratorDisplayName || artifact.orchestratorName || artifact.orchestratorKey || '');
   }
 })();
 """;
