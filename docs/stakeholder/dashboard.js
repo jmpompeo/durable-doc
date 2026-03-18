@@ -1,878 +1,3 @@
-namespace DurableDoc.Dashboard;
-
-internal static class DashboardHtmlTemplate
-{
-    public static string Render(
-        string payload,
-        string mermaidBundleFileName,
-        string dashboardCssFileName,
-        string dashboardScriptFileName)
-    {
-        return """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>durable-doc dashboard</title>
-  <link rel="stylesheet" href="__DASHBOARD_CSS__">
-</head>
-<body>
-  <div class="app-shell">
-    <aside class="sidebar">
-      <section class="panel brand">
-        <p class="eyebrow">Workflow Explorer</p>
-        <h1>durable-doc</h1>
-        <p class="lede">Read the flow in order, switch views quickly, and keep your place while localhost refreshes.</p>
-      </section>
-
-      <section class="panel controls">
-        <label class="field" for="orchestrator-filter">
-          <span>Filter orchestrators</span>
-          <input id="orchestrator-filter" type="search" placeholder="Search by orchestrator name">
-        </label>
-        <label class="field" for="mode-filter">
-          <span>Availability</span>
-          <select id="mode-filter">
-            <option value="">All mode availability</option>
-            <option value="developer">Has developer view</option>
-            <option value="business">Has business view</option>
-            <option value="both">Has both views</option>
-          </select>
-        </label>
-        <p class="hint">Use Up and Down to move between orchestrators, Left and Right to switch modes, and <code>/</code> to focus step search.</p>
-      </section>
-
-      <section class="panel results-panel">
-        <div class="section-heading">
-          <h2>Orchestrators</h2>
-          <span id="result-count" class="count">0 total</span>
-        </div>
-        <div id="results" class="results"></div>
-      </section>
-    </aside>
-
-    <main id="workspace" class="workspace">
-      <section id="stage" class="panel stage">
-        <div class="stage-header">
-          <div>
-            <div id="selected-mode" class="badge">No selection</div>
-            <h2 id="selected-title">Select a generated diagram</h2>
-          </div>
-          <div class="stage-actions">
-            <div id="mode-switcher" class="mode-switcher"></div>
-            <button id="toggle-stage" class="panel-toggle" type="button" aria-pressed="false">Collapse stage</button>
-            <button id="compare-toggle" class="compare-toggle" type="button">Compare views</button>
-            <div id="refresh-indicator" class="refresh-indicator">Static snapshot</div>
-          </div>
-        </div>
-
-        <p class="hint">The diagram view prioritizes execution order. Click a step to trace what comes before and after it. Localhost preview keeps polling for regenerated artifacts.</p>
-
-        <div id="summary-cards" class="summary-grid"></div>
-
-        <div class="toolbar">
-          <label class="field field-grow" for="node-search">
-            <span>Jump to step</span>
-            <input id="node-search" type="search" placeholder="Find step, event, timer, or branch label">
-          </label>
-          <div class="toolbar-actions">
-            <button id="find-step" type="button">Find</button>
-            <button id="start-step" type="button">Start step</button>
-            <button id="clear-step" type="button">Clear highlight</button>
-          </div>
-        </div>
-
-        <div id="node-search-status" class="meta"></div>
-        <div id="legend" class="legend"></div>
-        <div id="diagram-grid" class="diagram-grid">
-          <div class="empty">Choose an orchestrator to inspect its generated diagrams.</div>
-        </div>
-      </section>
-
-      <aside class="panel inspector">
-        <section class="inspector-section">
-          <h3>Workflow details</h3>
-          <div id="details" class="details-grid"></div>
-        </section>
-
-        <section class="inspector-section">
-          <h3>Selected step</h3>
-          <div id="node-details" class="node-details empty">Select a step to inspect its incoming and outgoing flow.</div>
-        </section>
-
-        <section class="inspector-section">
-          <h3>Warnings</h3>
-          <ul id="warnings" class="warnings"></ul>
-        </section>
-
-        <details class="source-panel">
-          <summary>Mermaid source</summary>
-          <pre id="source" class="source"></pre>
-        </details>
-      </aside>
-    </main>
-  </div>
-
-  <script id="dashboard-bootstrap" type="application/json">__PAYLOAD__</script>
-  <script src="__MERMAID_BUNDLE__"></script>
-  <script src="__DASHBOARD_SCRIPT__"></script>
-</body>
-</html>
-"""
-            .Replace("__PAYLOAD__", payload, StringComparison.Ordinal)
-            .Replace("__MERMAID_BUNDLE__", mermaidBundleFileName, StringComparison.Ordinal)
-            .Replace("__DASHBOARD_CSS__", dashboardCssFileName, StringComparison.Ordinal)
-            .Replace("__DASHBOARD_SCRIPT__", dashboardScriptFileName, StringComparison.Ordinal);
-    }
-}
-
-internal static class DashboardCssTemplate
-{
-    public static string Render()
-    {
-        return """
-:root {
-  color-scheme: light;
-  --bg: #f4efe7;
-  --bg-accent: #ffd8c2;
-  --panel: rgba(255, 250, 244, 0.94);
-  --panel-strong: #fffdf9;
-  --ink: #172230;
-  --muted: #657182;
-  --accent: #0d9488;
-  --accent-strong: #0f766e;
-  --accent-soft: #d8f3ef;
-  --hot: #ef8354;
-  --line: rgba(23, 34, 48, 0.12);
-  --line-strong: rgba(23, 34, 48, 0.22);
-  --shadow: 0 28px 60px rgba(23, 34, 48, 0.14);
-  --radius: 24px;
-}
-
-* {
-  box-sizing: border-box;
-}
-
-html {
-  min-height: 100%;
-}
-
-body {
-  margin: 0;
-  min-height: 100vh;
-  font-family: "Avenir Next", "Segoe UI", sans-serif;
-  color: var(--ink);
-  overflow-x: hidden;
-  background:
-    radial-gradient(circle at top left, rgba(13, 148, 136, 0.18), transparent 26%),
-    radial-gradient(circle at top right, rgba(239, 131, 84, 0.16), transparent 32%),
-    linear-gradient(135deg, #fff8f1 0%, var(--bg) 48%, #efe4d8 100%);
-}
-
-button,
-input,
-select {
-  font: inherit;
-}
-
-button {
-  cursor: pointer;
-}
-
-code {
-  font-family: "SFMono-Regular", Consolas, monospace;
-}
-
-.app-shell {
-  min-height: 100vh;
-  display: grid;
-  grid-template-columns: minmax(280px, 320px) 1fr;
-  gap: 22px;
-  padding: 22px;
-  min-width: 0;
-}
-
-.sidebar,
-.workspace {
-  display: grid;
-  gap: 18px;
-  min-width: 0;
-}
-
-.sidebar {
-  align-content: start;
-}
-
-.workspace {
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
-  align-items: start;
-  min-width: 0;
-}
-
-.workspace.stage-collapsed {
-  grid-template-columns: minmax(108px, 132px) minmax(0, 1fr);
-}
-
-.panel {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(18px);
-}
-
-.brand,
-.controls,
-.results-panel,
-.stage,
-.inspector {
-  min-width: 0;
-}
-
-.brand {
-  padding: 22px;
-}
-
-.eyebrow {
-  margin: 0 0 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  font-size: 0.77rem;
-  color: var(--accent-strong);
-  font-weight: 700;
-}
-
-h1,
-h2,
-h3,
-h4,
-p {
-  margin: 0;
-}
-
-h1 {
-  font-size: clamp(1.9rem, 2.8vw, 2.8rem);
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.lede,
-.hint,
-.meta,
-.count,
-.refresh-indicator,
-.empty {
-  color: var(--muted);
-}
-
-.lede {
-  margin-top: 12px;
-  line-height: 1.5;
-}
-
-.controls,
-.results-panel,
-.stage,
-.inspector {
-  padding: 18px;
-}
-
-.controls,
-.details-grid {
-  display: grid;
-  gap: 12px;
-}
-
-.controls {
-  gap: 10px;
-}
-
-.field {
-  display: grid;
-  gap: 8px;
-  font-size: 0.92rem;
-}
-
-.field-grow {
-  min-width: min(360px, 100%);
-}
-
-input,
-select {
-  width: 100%;
-  border: 1px solid rgba(23, 34, 48, 0.16);
-  border-radius: 16px;
-  padding: 12px 14px;
-  background: #ffffff;
-  color: var(--ink);
-}
-
-.section-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-
-.results {
-  display: grid;
-  gap: 10px;
-  max-height: calc(100vh - 340px);
-  overflow: auto;
-}
-
-.result {
-  width: 100%;
-  text-align: left;
-  border: 1px solid transparent;
-  border-radius: 18px;
-  background: var(--panel-strong);
-  padding: 14px;
-  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
-}
-
-.result:hover,
-.result:focus-visible,
-.result.active {
-  border-color: rgba(13, 148, 136, 0.32);
-  background: linear-gradient(180deg, #ffffff 0%, var(--accent-soft) 100%);
-  transform: translateY(-1px);
-  outline: none;
-}
-
-.result-title {
-  display: grid;
-  gap: 8px;
-  margin-bottom: 8px;
-  min-width: 0;
-}
-
-.result-title strong {
-  font-size: 1rem;
-  min-width: 0;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
-.result .meta {
-  display: block;
-  min-width: 0;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
-.mode-pill-list,
-.mode-switcher,
-.toolbar-actions,
-.legend,
-.node-chip-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.pill,
-.mode-switcher button,
-.compare-toggle,
-.badge,
-.legend-item,
-.toolbar-actions button,
-.step-type,
-.edge-chip {
-  border-radius: 999px;
-  padding: 8px 12px;
-  border: 1px solid var(--line);
-  background: #ffffff;
-  color: var(--ink);
-}
-
-.pill,
-.step-type,
-.edge-chip {
-  padding: 4px 10px;
-  font-size: 0.78rem;
-}
-
-.badge {
-  display: inline-flex;
-  align-items: center;
-  border-color: transparent;
-  background: linear-gradient(90deg, var(--accent-soft) 0%, #fff2ea 100%);
-  color: var(--accent-strong);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 10px;
-}
-
-.stage {
-  display: grid;
-  gap: 16px;
-  min-width: 0;
-}
-
-.stage.collapsed {
-  align-content: start;
-}
-
-.stage.collapsed > :not(.stage-header) {
-  display: none;
-}
-
-.stage.collapsed .stage-header {
-  display: grid;
-  gap: 12px;
-}
-
-.stage.collapsed .stage-header > div:first-child {
-  display: none;
-}
-
-.stage.collapsed .stage-actions {
-  justify-items: stretch;
-}
-
-.stage.collapsed .stage-actions > :not(.panel-toggle) {
-  display: none;
-}
-
-.stage-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: start;
-}
-
-.stage-actions {
-  display: grid;
-  gap: 10px;
-  justify-items: end;
-}
-
-.mode-switcher button,
-.panel-toggle,
-.compare-toggle,
-.toolbar-actions button {
-  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
-}
-
-.mode-switcher button.active,
-.panel-toggle.active,
-.compare-toggle.active,
-.toolbar-actions button:hover,
-.toolbar-actions button:focus-visible {
-  border-color: rgba(13, 148, 136, 0.36);
-  background: var(--accent-soft);
-  color: var(--accent-strong);
-  font-weight: 700;
-  outline: none;
-}
-
-.panel-toggle {
-  border-radius: 999px;
-  padding: 8px 12px;
-  border: 1px solid var(--line);
-  background: #ffffff;
-  color: var(--ink);
-}
-
-.stage.collapsed .panel-toggle {
-  width: 100%;
-  min-height: 120px;
-  white-space: normal;
-  text-align: center;
-  font-weight: 700;
-}
-
-.compare-toggle:disabled {
-  cursor: default;
-  opacity: 0.45;
-}
-
-.summary-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 12px;
-}
-
-.summary-card {
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: var(--panel-strong);
-  padding: 14px;
-}
-
-.summary-card strong {
-  display: block;
-  margin-bottom: 6px;
-  color: var(--muted);
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.summary-card span {
-  display: block;
-  font-size: 1.05rem;
-  font-weight: 700;
-}
-
-.toolbar {
-  display: flex;
-  justify-content: space-between;
-  gap: 14px;
-  align-items: end;
-  flex-wrap: wrap;
-}
-
-.legend {
-  min-height: 36px;
-}
-
-.legend-item {
-  padding-inline: 10px;
-  font-size: 0.82rem;
-}
-
-button.legend-item {
-  cursor: pointer;
-}
-
-.legend-item.active,
-button.legend-item:hover,
-button.legend-item:focus-visible {
-  border-color: rgba(13, 148, 136, 0.36);
-  background: var(--accent-soft);
-  color: var(--accent-strong);
-  font-weight: 700;
-  outline: none;
-}
-
-.diagram-grid {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: 1fr;
-}
-
-.diagram-grid.compare {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.diagram-card {
-  border: 1px solid var(--line);
-  border-radius: 22px;
-  background: var(--panel-strong);
-  padding: 16px;
-  display: grid;
-  gap: 14px;
-  min-width: 0;
-}
-
-.diagram-card-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: baseline;
-}
-
-.diagram-card-title {
-  font-size: 1.05rem;
-}
-
-.diagram-meta {
-  font-size: 0.88rem;
-  color: var(--muted);
-}
-
-.flow-stage {
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  background: linear-gradient(180deg, #fffdf9 0%, #fff8f2 100%);
-  padding: 18px;
-  overflow: auto;
-}
-
-.flow-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 14px;
-}
-
-.flow-step {
-  position: relative;
-  padding-left: calc(26px + var(--depth, 0) * 24px);
-}
-
-.flow-step::before {
-  content: "";
-  position: absolute;
-  left: calc(8px + var(--depth, 0) * 24px);
-  top: -12px;
-  bottom: -18px;
-  width: 2px;
-  background: linear-gradient(180deg, rgba(13, 148, 136, 0) 0%, rgba(13, 148, 136, 0.2) 20%, rgba(13, 148, 136, 0.2) 80%, rgba(13, 148, 136, 0) 100%);
-}
-
-.flow-step:first-child::before {
-  top: 18px;
-}
-
-.flow-step:last-child::before {
-  bottom: calc(100% - 18px);
-}
-
-.step-button {
-  width: 100%;
-  text-align: left;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: #ffffff;
-  padding: 14px;
-  display: grid;
-  gap: 10px;
-  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
-}
-
-.step-button:hover,
-.step-button:focus-visible {
-  transform: translateX(2px);
-  border-color: rgba(13, 148, 136, 0.36);
-  box-shadow: 0 12px 28px rgba(13, 148, 136, 0.12);
-  outline: none;
-}
-
-.step-button.active {
-  border-color: rgba(13, 148, 136, 0.48);
-  background: linear-gradient(180deg, #ffffff 0%, #e8fbf5 100%);
-  box-shadow: 0 14px 30px rgba(13, 148, 136, 0.16);
-}
-
-.step-button.related {
-  border-color: rgba(239, 131, 84, 0.3);
-}
-
-.step-button.dim {
-  opacity: 0.45;
-}
-
-.step-button.match {
-  box-shadow: 0 0 0 3px rgba(239, 131, 84, 0.18);
-}
-
-.step-heading,
-.step-subheading,
-.edge-list,
-.node-list {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: start;
-  flex-wrap: wrap;
-}
-
-.step-index {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--accent-strong);
-  font-weight: 700;
-}
-
-.step-title {
-  font-size: 1rem;
-  font-weight: 700;
-}
-
-.step-meta,
-.edge-list,
-.node-list {
-  color: var(--muted);
-  font-size: 0.88rem;
-}
-
-.step-subheading {
-  align-items: center;
-}
-
-.step-note {
-  font-size: 0.9rem;
-  color: var(--muted);
-}
-
-.step-type[data-kind="orchestratorstart"],
-.legend-item[data-kind="orchestratorstart"] {
-  background: rgba(13, 148, 136, 0.12);
-}
-
-.step-type[data-kind="activity"],
-.legend-item[data-kind="activity"] {
-  background: rgba(23, 34, 48, 0.06);
-}
-
-.step-type[data-kind="suborchestrator"],
-.step-type[data-kind="retrysuborchestrator"],
-.legend-item[data-kind="suborchestrator"],
-.legend-item[data-kind="retrysuborchestrator"] {
-  background: rgba(79, 70, 229, 0.12);
-}
-
-.step-type[data-kind="decision"],
-.legend-item[data-kind="decision"] {
-  background: rgba(245, 158, 11, 0.16);
-}
-
-.step-type[data-kind="retryactivity"],
-.step-type[data-kind="retrysuborchestrator"],
-.legend-item[data-kind="retryactivity"],
-.legend-item[data-kind="retrysuborchestrator"] {
-  background: rgba(239, 131, 84, 0.18);
-}
-
-.step-type[data-kind="externalevent"],
-.legend-item[data-kind="externalevent"] {
-  background: rgba(14, 165, 233, 0.16);
-}
-
-.step-type[data-kind="timer"],
-.legend-item[data-kind="timer"] {
-  background: rgba(99, 102, 241, 0.14);
-}
-
-.step-type[data-kind="fanout"],
-.step-type[data-kind="fanin"],
-.step-type[data-kind="parallelgroup"],
-.legend-item[data-kind="fanout"],
-.legend-item[data-kind="fanin"],
-.legend-item[data-kind="parallelgroup"] {
-  background: rgba(168, 85, 247, 0.14);
-}
-
-.edge-chip {
-  background: #fff8f1;
-}
-
-.details-grid,
-.node-details {
-  display: grid;
-  gap: 10px;
-  min-width: 0;
-}
-
-.detail,
-.node-panel {
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--panel-strong);
-  padding: 12px 14px;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.detail strong,
-.node-panel strong {
-  display: block;
-  margin-bottom: 4px;
-  font-size: 0.82rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-}
-
-.detail-value {
-  min-width: 0;
-  max-width: 100%;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
-.warnings {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 10px;
-}
-
-.warnings li {
-  border-radius: 16px;
-  background: rgba(254, 243, 199, 0.75);
-  color: #92400e;
-  padding: 12px 14px;
-}
-
-.inspector {
-  display: grid;
-  gap: 18px;
-  min-width: 0;
-}
-
-.inspector-section {
-  display: grid;
-  gap: 12px;
-}
-
-.source-panel {
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
-}
-
-.source-panel summary {
-  cursor: pointer;
-  font-weight: 700;
-}
-
-.source {
-  margin: 12px 0 0;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: #fbf7f1;
-  padding: 14px;
-  overflow: auto;
-  font-family: "SFMono-Regular", Consolas, monospace;
-  font-size: 0.9rem;
-}
-
-@media (max-width: 1200px) {
-  .workspace {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 960px) {
-  .app-shell {
-    grid-template-columns: 1fr;
-  }
-
-  .results {
-    max-height: 280px;
-  }
-
-  .diagram-grid.compare {
-    grid-template-columns: 1fr;
-  }
-}
-""";
-    }
-}
-
-internal static class DashboardScriptTemplate
-{
-    public static string Render()
-    {
-        return """
 (function () {
   const bootstrapEl = document.getElementById('dashboard-bootstrap');
   const workspaceEl = document.getElementById('workspace');
@@ -894,11 +19,14 @@ internal static class DashboardScriptTemplate
   const summaryCardsEl = document.getElementById('summary-cards');
   const legendEl = document.getElementById('legend');
   const nodeDetailsEl = document.getElementById('node-details');
+  const stakeholderOverviewEl = document.getElementById('stakeholder-overview');
   const nodeSearchEl = document.getElementById('node-search');
   const nodeSearchStatusEl = document.getElementById('node-search-status');
   const findStepEl = document.getElementById('find-step');
   const startStepEl = document.getElementById('start-step');
   const clearStepEl = document.getElementById('clear-step');
+  const audience = (document.body.getAttribute('data-audience') || 'developer').toLowerCase();
+  const isStakeholderAudience = audience === 'stakeholder';
   const refreshMs = 3000;
 
   const state = {
@@ -920,6 +48,7 @@ internal static class DashboardScriptTemplate
     window.mermaid.initialize({ startOnLoad: false, securityLevel: 'loose' });
   }
 
+  configureAudience();
   hydrate(false);
 
   orchestratorFilterEl.addEventListener('input', applyFilters);
@@ -959,9 +88,9 @@ internal static class DashboardScriptTemplate
       return;
     }
 
-    state.selectedNodeId = isBusinessArtifact(selected)
+    state.selectedNodeId = isStakeholderAudience
       ? getVisibleBusinessFlowItems(buildBusinessFlow(selected))[0]?.key || ''
-      : createFlatNodeKey(selected, startNode.id);
+      : startNode.id;
     renderSelection();
     writeUrlState('push');
   });
@@ -992,6 +121,28 @@ internal static class DashboardScriptTemplate
     } catch {
       return [];
     }
+  }
+
+  function configureAudience() {
+    if (!isStakeholderAudience) {
+      return;
+    }
+
+    document.getElementById('brand-eyebrow').textContent = 'Business Flow Library';
+    document.getElementById('brand-title').textContent = 'durable-doc';
+    document.getElementById('brand-lede').textContent = 'Review the flow, inspect the current stage, and share a clean business snapshot without reading orchestration code.';
+    document.getElementById('orchestrator-filter-label').textContent = 'Filter workflows';
+    orchestratorFilterEl.placeholder = 'Search by workflow or capability';
+    document.getElementById('controls-hint').innerHTML = 'Use Up and Down to move between workflows, and <code>/</code> to focus stage search.';
+    document.getElementById('results-heading').textContent = 'Workflows';
+    document.getElementById('stage-hint').textContent = 'Review the business flow, select a stage to inspect what happens before and after it, and share the static output with non-engineering partners.';
+    document.getElementById('node-search-label').textContent = 'Jump to stage';
+    nodeSearchEl.placeholder = 'Find stage, event, decision, or note';
+    findStepEl.textContent = 'Find stage';
+    startStepEl.textContent = 'First stage';
+    clearStepEl.textContent = 'Clear selection';
+    document.getElementById('details-heading').textContent = 'Workflow summary';
+    document.getElementById('node-details-heading').textContent = 'Selected stage';
   }
 
   function applyUrlState() {
@@ -1089,11 +240,7 @@ internal static class DashboardScriptTemplate
 
     const selectedGroup = getSelectedGroup();
     if ((!state.selectedMode || !selectedGroup || !hasMode(selectedGroup, state.selectedMode)) && selectedGroup) {
-      state.selectedMode = hasMode(selectedGroup, 'developer')
-        ? 'developer'
-        : selectedGroup.modes[0]
-          ? selectedGroup.modes[0].mode
-          : '';
+      state.selectedMode = getPreferredMode(selectedGroup);
     }
 
     ensureSelectedNode();
@@ -1108,10 +255,35 @@ internal static class DashboardScriptTemplate
     diagrams.forEach(function (diagram) {
       const existing = grouped.get(diagram.orchestratorName) || {
         orchestratorName: diagram.orchestratorName,
+        businessName: diagram.businessName || '',
+        capability: diagram.capability || '',
+        summary: diagram.summary || '',
+        audienceNotes: diagram.audienceNotes || '',
+        orchestratorNotes: diagram.orchestratorNotes || '',
+        outcomes: diagram.outcomes || [],
         sourceFile: diagram.sourceFile || '',
         sourceProjectPath: diagram.sourceProjectPath || '',
         modes: []
       };
+
+      if (!existing.businessName && diagram.businessName) {
+        existing.businessName = diagram.businessName;
+      }
+      if (!existing.capability && diagram.capability) {
+        existing.capability = diagram.capability;
+      }
+      if (!existing.summary && diagram.summary) {
+        existing.summary = diagram.summary;
+      }
+      if (!existing.audienceNotes && diagram.audienceNotes) {
+        existing.audienceNotes = diagram.audienceNotes;
+      }
+      if (!existing.orchestratorNotes && diagram.orchestratorNotes) {
+        existing.orchestratorNotes = diagram.orchestratorNotes;
+      }
+      if ((!existing.outcomes || existing.outcomes.length === 0) && diagram.outcomes && diagram.outcomes.length > 0) {
+        existing.outcomes = diagram.outcomes;
+      }
 
       const existingMode = existing.modes.find(function (entry) { return entry.mode === diagram.mode; });
       if (!existingMode || new Date(existingMode.generatedAt) < new Date(diagram.generatedAt)) {
@@ -1155,11 +327,7 @@ internal static class DashboardScriptTemplate
 
     const selectedGroup = getSelectedGroup();
     if (selectedGroup && !hasMode(selectedGroup, state.selectedMode)) {
-      state.selectedMode = hasMode(selectedGroup, 'developer')
-        ? 'developer'
-        : selectedGroup.modes[0]
-          ? selectedGroup.modes[0].mode
-          : '';
+      state.selectedMode = getPreferredMode(selectedGroup);
     }
 
     ensureSelectedNode();
@@ -1175,7 +343,7 @@ internal static class DashboardScriptTemplate
       return;
     }
 
-    if (isBusinessArtifact(artifact)) {
+    if (isStakeholderAudience) {
       const visibleItems = getVisibleBusinessFlowItems(buildBusinessFlow(artifact));
       if (state.selectedNodeId && visibleItems.some(function (item) { return item.key === state.selectedNodeId; })) {
         return;
@@ -1190,7 +358,7 @@ internal static class DashboardScriptTemplate
     }
 
     const startNode = getStartNode(artifact);
-    state.selectedNodeId = startNode ? createFlatNodeKey(artifact, startNode.id) : '';
+    state.selectedNodeId = startNode ? startNode.id : '';
   }
 
   function renderResults() {
@@ -1202,7 +370,46 @@ internal static class DashboardScriptTemplate
       return;
     }
 
+    if (isStakeholderAudience) {
+      const capabilityGroups = new Map();
+      state.filtered.forEach(function (group) {
+        const capability = group.capability || 'Uncategorized';
+        if (!capabilityGroups.has(capability)) {
+          capabilityGroups.set(capability, []);
+        }
+
+        capabilityGroups.get(capability).push(group);
+      });
+
+      Array.from(capabilityGroups.keys()).sort(function (left, right) {
+        return left.localeCompare(right);
+      }).forEach(function (capability) {
+        const section = document.createElement('section');
+        section.className = 'result-group';
+
+        const heading = document.createElement('h3');
+        heading.className = 'result-group-title';
+        heading.textContent = capability;
+        section.appendChild(heading);
+
+        capabilityGroups.get(capability).sort(function (left, right) {
+          return getGroupTitle(left).localeCompare(getGroupTitle(right));
+        }).forEach(function (group) {
+          section.appendChild(renderResultButton(group));
+        });
+
+        resultsEl.appendChild(section);
+      });
+
+      return;
+    }
+
     state.filtered.forEach(function (group) {
+      resultsEl.appendChild(renderResultButton(group));
+    });
+  }
+
+  function renderResultButton(group) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'result';
@@ -1216,15 +423,15 @@ internal static class DashboardScriptTemplate
 
       button.innerHTML =
         '<div class="result-title">' +
-          '<strong>' + escapeHtml(group.orchestratorName) + '</strong>' +
+          '<strong>' + escapeHtml(getGroupTitle(group)) + '</strong>' +
           '<div class="mode-pill-list">' + modes + '</div>' +
         '</div>' +
-        '<div class="meta">' + escapeHtml(group.sourceProjectPath || group.sourceFile || 'Source unknown') + '</div>';
+        '<div class="meta">' + escapeHtml(getGroupMeta(group)) + '</div>';
 
       button.addEventListener('click', function () {
         state.selectedOrchestrator = group.orchestratorName;
         if (!hasMode(group, state.selectedMode)) {
-          state.selectedMode = hasMode(group, 'developer') ? 'developer' : group.modes[0].mode;
+          state.selectedMode = getPreferredMode(group);
         }
         ensureSelectedNode();
         renderResults();
@@ -1232,8 +439,7 @@ internal static class DashboardScriptTemplate
         writeUrlState('push');
       });
 
-      resultsEl.appendChild(button);
-    });
+      return button;
   }
 
   function renderSelection() {
@@ -1248,6 +454,7 @@ internal static class DashboardScriptTemplate
       diagramGridEl.classList.remove('compare');
       diagramGridEl.innerHTML = '<div class="empty">Choose an orchestrator to inspect its generated diagrams.</div>';
       detailsEl.innerHTML = '';
+      stakeholderOverviewEl.innerHTML = '';
       warningsEl.innerHTML = '';
       sourceEl.textContent = '';
       modeSwitcherEl.innerHTML = '';
@@ -1267,11 +474,13 @@ internal static class DashboardScriptTemplate
       state.compareMode = false;
     }
 
-    modeEl.textContent = selected.mode + ' view';
-    titleEl.textContent = group.orchestratorName;
-    if (!isBusinessArtifact(selected)) {
+    modeEl.textContent = isStakeholderAudience
+      ? (selected.mode === 'business' ? 'Business flow' : 'Workflow view')
+      : selected.mode + ' view';
+    if (!isStakeholderAudience) {
       state.legendFilterKind = '';
     }
+    titleEl.textContent = getGroupTitle(group);
     renderModeSwitcher(group);
     renderSummary(selected);
     renderLegend(selected);
@@ -1282,6 +491,11 @@ internal static class DashboardScriptTemplate
   }
 
   function renderModeSwitcher(group) {
+    if (isStakeholderAudience) {
+      modeSwitcherEl.innerHTML = '';
+      return;
+    }
+
     modeSwitcherEl.innerHTML = '';
 
     group.modes.forEach(function (entry) {
@@ -1306,6 +520,21 @@ internal static class DashboardScriptTemplate
 
   function renderSummary(selected) {
     const graph = buildGraph(selected);
+    if (isStakeholderAudience) {
+      const summary = [
+        ['Capability', selected.capability || 'Uncategorized'],
+        ['Stages', String(graph.nodes.length)],
+        ['Outcomes', String((selected.outcomes || []).length)],
+        ['Flow shape', describeFlowShape(graph)],
+        ['Updated', new Date(selected.generatedAt).toLocaleDateString()]
+      ];
+
+      summaryCardsEl.innerHTML = summary.map(function (entry) {
+        return '<div class="summary-card"><strong>' + escapeHtml(entry[0]) + '</strong><span>' + escapeHtml(entry[1]) + '</span></div>';
+      }).join('');
+      return;
+    }
+
     const branchCount = countBranchNodes(graph);
     const warningsCount = (selected.warnings || []).length;
     const summary = [
@@ -1328,7 +557,7 @@ internal static class DashboardScriptTemplate
       .map(function (node) { return String(node.nodeType || '').toLowerCase(); })
       .filter(function (value, index, all) { return value && all.indexOf(value) === index; });
 
-    if (!isBusinessArtifact(selected)) {
+    if (!isStakeholderAudience) {
       legendEl.innerHTML = kinds.map(function (kind) {
         return '<span class="legend-item" data-kind="' + escapeHtml(kind) + '">' + escapeHtml(formatNodeType(kind)) + '</span>';
       }).join('');
@@ -1361,24 +590,57 @@ internal static class DashboardScriptTemplate
     });
   }
 
-  function isBusinessArtifact(artifact) {
-    return !!artifact && String(artifact.mode || '').toLowerCase() === 'business';
-  }
-
   function renderInspector(selected) {
     const graph = buildGraph(selected);
-    const selectedContext = getSelectedNodeContext(selected);
-    const selectedNode = selectedContext ? selectedContext.node : null;
+    const selectedContext = isStakeholderAudience ? getSelectedNodeContext(selected) : null;
+    const selectedNode = isStakeholderAudience
+      ? (selectedContext ? selectedContext.node : null)
+      : (state.selectedNodeId ? graph.byId[state.selectedNodeId] : null);
 
-    const details = isBusinessArtifact(selected)
-      ? buildBusinessDetails(selected)
-      : [
-          ['Generated', new Date(selected.generatedAt).toLocaleString()],
-          ['Source project', selected.sourceProjectPath || 'Unknown'],
-          ['Source file', selected.sourceFile || 'Unknown'],
-          ['Artifact file', selected.mermaidFileName || 'Unknown'],
-          ['Primary path', graph.nodes.map(function (node) { return node.displayLabel || node.name || node.id; }).join(' -> ')]
-        ];
+    if (isStakeholderAudience) {
+      stakeholderOverviewEl.innerHTML = renderStakeholderOverview(selected);
+
+      const details = buildBusinessDetails(selected);
+
+      detailsEl.innerHTML = details.map(function (entry) {
+        return '<div class="detail"><strong>' + escapeHtml(entry[0]) + '</strong><div class="detail-value">' + escapeHtml(entry[1]) + '</div></div>';
+      }).join('');
+
+      warningsEl.innerHTML = '';
+
+      if (!selectedNode) {
+        nodeDetailsEl.className = 'node-details empty';
+        nodeDetailsEl.textContent = 'Select a stage to inspect what leads into it and what follows.';
+        return;
+      }
+
+      const selectedGraph = selectedContext ? selectedContext.graph : graph;
+      const incoming = (selectedGraph.incoming[selectedNode.id] || []).map(function (edge) {
+        return describeEdge(selectedGraph, edge, 'from');
+      });
+      const outgoing = (selectedGraph.outgoing[selectedNode.id] || []).map(function (edge) {
+        return describeEdge(selectedGraph, edge, 'to');
+      });
+
+      nodeDetailsEl.className = 'node-details';
+      nodeDetailsEl.innerHTML =
+        '<div class="node-panel"><strong>Stage</strong><div class="detail-value">' + escapeHtml(selectedNode.displayLabel || selectedNode.name || selectedNode.id) + '</div></div>' +
+        '<div class="node-panel"><strong>Type</strong><div class="detail-value">' + escapeHtml(formatNodeType(selectedNode.nodeType)) + '</div></div>' +
+        '<div class="node-panel"><strong>XML summary</strong><div class="detail-value">' + escapeHtml(selectedNode.documentationSummary || 'No XML summary found.') + '</div></div>' +
+        '<div class="node-panel"><strong>What leads here</strong><div class="node-list">' + renderNodeList(incoming, 'Start of workflow') + '</div></div>' +
+        '<div class="node-panel"><strong>What follows</strong><div class="node-list">' + renderNodeList(outgoing, 'End of workflow') + '</div></div>';
+      return;
+    }
+
+    stakeholderOverviewEl.innerHTML = '';
+
+    const details = [
+      ['Generated', new Date(selected.generatedAt).toLocaleString()],
+      ['Source project', selected.sourceProjectPath || 'Unknown'],
+      ['Source file', selected.sourceFile || 'Unknown'],
+      ['Artifact file', selected.mermaidFileName || 'Unknown'],
+      ['Primary path', graph.nodes.map(function (node) { return node.displayLabel || node.name || node.id; }).join(' -> ')]
+    ];
 
     detailsEl.innerHTML = details.map(function (entry) {
       return '<div class="detail"><strong>' + escapeHtml(entry[0]) + '</strong><div class="detail-value">' + escapeHtml(entry[1]) + '</div></div>';
@@ -1391,50 +653,30 @@ internal static class DashboardScriptTemplate
 
     if (!selectedNode) {
       nodeDetailsEl.className = 'node-details empty';
-      nodeDetailsEl.textContent = isBusinessArtifact(selected)
-        ? 'Select a stage to inspect its incoming and outgoing flow.'
-        : 'Select a step to inspect its incoming and outgoing flow.';
+      nodeDetailsEl.textContent = 'Select a step to inspect its incoming and outgoing flow.';
       return;
     }
 
-    const selectedGraph = selectedContext ? selectedContext.graph : graph;
-    const incoming = (selectedGraph.incoming[selectedNode.id] || []).map(function (edge) {
-      return describeEdge(selectedGraph, edge, 'from');
+    const incoming = (graph.incoming[selectedNode.id] || []).map(function (edge) {
+      return describeEdge(graph, edge, 'from');
     });
-    const outgoing = (selectedGraph.outgoing[selectedNode.id] || []).map(function (edge) {
-      return describeEdge(selectedGraph, edge, 'to');
+    const outgoing = (graph.outgoing[selectedNode.id] || []).map(function (edge) {
+      return describeEdge(graph, edge, 'to');
     });
 
     nodeDetailsEl.className = 'node-details';
     nodeDetailsEl.innerHTML =
-      '<div class="node-panel"><strong>' + escapeHtml(isBusinessArtifact(selected) ? 'Stage' : 'Step') + '</strong><div class="detail-value">' + escapeHtml(selectedNode.displayLabel || selectedNode.name || selectedNode.id) + '</div></div>' +
+      '<div class="node-panel"><strong>Step</strong><div class="detail-value">' + escapeHtml(selectedNode.displayLabel || selectedNode.name || selectedNode.id) + '</div></div>' +
       '<div class="node-panel"><strong>Type</strong><div class="detail-value">' + escapeHtml(formatNodeType(selectedNode.nodeType)) + '</div></div>' +
-      '<div class="node-panel"><strong>XML summary</strong><div class="detail-value">' + escapeHtml(selectedNode.documentationSummary || 'No XML summary found.') + '</div></div>' +
       '<div class="node-panel"><strong>Source line</strong><div class="detail-value">' + escapeHtml(selectedNode.lineNumber ? String(selectedNode.lineNumber) : 'Unknown') + '</div></div>' +
       '<div class="node-panel"><strong>Incoming</strong><div class="node-list">' + renderNodeList(incoming, 'Start of workflow') + '</div></div>' +
       '<div class="node-panel"><strong>Outgoing</strong><div class="node-list">' + renderNodeList(outgoing, 'End of workflow') + '</div></div>';
   }
 
-  function buildBusinessDetails(selected) {
-    const flow = buildBusinessFlow(selected);
-    const visibleItems = getVisibleBusinessFlowItems(flow);
-    const selectedIndex = visibleItems.findIndex(function (item) { return item.key === state.selectedNodeId; });
-    const selectedItem = selectedIndex >= 0 ? visibleItems[selectedIndex] : null;
-    const previousItem = selectedIndex > 0 ? visibleItems[selectedIndex - 1] : null;
-    const nextItem = selectedIndex >= 0 && selectedIndex < visibleItems.length - 1 ? visibleItems[selectedIndex + 1] : null;
-
-    return [
-      ['Highlighted stage', selectedItem ? getNodeLabel(selectedItem.node) : 'None'],
-      ['Previous stage', previousItem ? getNodeLabel(previousItem.node) : 'None'],
-      ['Next stage', nextItem ? getNodeLabel(nextItem.node) : 'None'],
-      ['XML summary', selectedItem && selectedItem.node.documentationSummary ? selectedItem.node.documentationSummary : 'No XML summary found.']
-    ];
-  }
-
   function renderDiagrams(group, selected) {
-    diagramGridEl.classList.toggle('compare', state.compareMode);
+    diagramGridEl.classList.toggle('compare', state.compareMode && !isStakeholderAudience);
 
-    const visible = state.compareMode
+    const visible = state.compareMode && !isStakeholderAudience
       ? ['developer', 'business'].map(function (mode) { return getMode(group, mode); }).filter(Boolean)
       : [selected];
 
@@ -1442,10 +684,13 @@ internal static class DashboardScriptTemplate
     visible.forEach(function (artifact) {
       const card = document.createElement('article');
       card.className = 'diagram-card';
+      const cardTitle = isStakeholderAudience
+        ? (artifact.mode === 'business' ? 'Business flow' : 'Workflow view')
+        : (artifact.mode === 'developer' ? 'Developer view' : 'Business view');
       card.innerHTML =
         '<div class="diagram-card-header">' +
           '<div>' +
-            '<h3 class="diagram-card-title">' + escapeHtml(artifact.mode === 'developer' ? 'Developer view' : 'Business view') + '</h3>' +
+            '<h3 class="diagram-card-title">' + escapeHtml(cardTitle) + '</h3>' +
             '<div class="diagram-meta">' + escapeHtml(describeFlowShape(buildGraph(artifact))) + ' · ' + escapeHtml(new Date(artifact.generatedAt).toLocaleString()) + '</div>' +
           '</div>' +
           '<span class="pill">' + escapeHtml(artifact.mode) + '</span>' +
@@ -1459,15 +704,14 @@ internal static class DashboardScriptTemplate
   }
 
   function renderFlowStage(container, artifact) {
-    if (isBusinessArtifact(artifact)) {
+    if (isStakeholderAudience) {
       renderBusinessFlowStage(container, artifact);
       return;
     }
 
     const graph = buildGraph(artifact);
-    const selection = getFlatNodeId(state.selectedNodeId);
-    const hasSelection = !!selection && !!graph.byId[selection];
-    const pathSets = hasSelection ? tracePath(graph, selection) : { incoming: {}, outgoing: {} };
+    const selection = graph.byId[state.selectedNodeId] ? state.selectedNodeId : '';
+    const pathSets = selection ? tracePath(graph, selection) : { incoming: {}, outgoing: {} };
     const query = nodeSearchEl.value.trim().toLowerCase();
 
     const list = document.createElement('ol');
@@ -1476,17 +720,15 @@ internal static class DashboardScriptTemplate
     graph.nodes.forEach(function (node, index) {
       const item = document.createElement('li');
       item.className = 'flow-step';
-      item.style.setProperty('--depth', '0');
 
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'step-button';
       button.dataset.nodeId = node.id;
 
-      const nodeKey = createFlatNodeKey(artifact, node.id);
-      const isSelected = nodeKey === state.selectedNodeId;
-      const isRelated = !isSelected && hasSelection && (pathSets.incoming[node.id] || pathSets.outgoing[node.id]);
-      const isDimmed = hasSelection && !isSelected && !isRelated;
+      const isSelected = node.id === selection;
+      const isRelated = !isSelected && (pathSets.incoming[node.id] || pathSets.outgoing[node.id]);
+      const isDimmed = !!selection && !isSelected && !isRelated;
       const isMatch = query && matchesNode(node, query);
 
       if (isSelected) {
@@ -1510,20 +752,20 @@ internal static class DashboardScriptTemplate
           '<div class="step-subheading">' +
             '<span class="step-index">' + escapeHtml(String(index + 1)) + '</span>' +
             '<div>' +
-              '<div class="step-title">' + escapeHtml(getNodeLabel(node)) + '</div>' +
-              '<div class="step-meta">' + escapeHtml(node.name && node.name !== node.displayLabel ? node.name : '') + '</div>' +
+              '<div class="step-title">' + escapeHtml(node.displayLabel || node.name || node.id) + '</div>' +
+              '<div class="step-meta">' + escapeHtml(describeSecondaryStepMeta(node)) + '</div>' +
             '</div>' +
           '</div>' +
           '<span class="step-type" data-kind="' + escapeHtml(String(node.nodeType || '').toLowerCase()) + '">' + escapeHtml(formatNodeType(node.nodeType)) + '</span>' +
         '</div>' +
         '<div class="step-subheading">' +
           '<span class="step-note">' + escapeHtml(describeConnectivity(incoming.length, outgoing.length, index === 0, index === graph.nodes.length - 1)) + '</span>' +
-          '<span class="step-meta">' + escapeHtml(node.lineNumber ? 'Line ' + node.lineNumber : 'Line unknown') + '</span>' +
+          '<span class="step-meta">' + escapeHtml(describeTertiaryStepMeta(node)) + '</span>' +
         '</div>' +
         '<div class="edge-list">' + renderEdgeChips(graph, outgoing) + '</div>';
 
       button.addEventListener('click', function () {
-        state.selectedNodeId = nodeKey;
+        state.selectedNodeId = node.id;
         renderSelection();
         writeUrlState('push');
         window.requestAnimationFrame(function () {
@@ -1560,13 +802,10 @@ internal static class DashboardScriptTemplate
       button.className = 'step-button';
       button.dataset.nodeId = node.id;
 
-      const isSelected = flowItem.key === state.selectedNodeId;
-      const isMatch = query && matchesNode(node, query);
-
-      if (isSelected) {
+      if (flowItem.key === state.selectedNodeId) {
         button.classList.add('active');
       }
-      if (isMatch) {
+      if (query && matchesNode(node, query)) {
         button.classList.add('match');
       }
 
@@ -1575,7 +814,7 @@ internal static class DashboardScriptTemplate
           '<div class="step-subheading">' +
             '<span class="step-index">' + escapeHtml(String(index + 1)) + '</span>' +
             '<div>' +
-              '<div class="step-title">' + escapeHtml(getNodeLabel(node)) + '</div>' +
+              '<div class="step-title">' + escapeHtml(node.displayLabel || node.name || node.id) + '</div>' +
               '<div class="step-meta">' + escapeHtml(getBusinessStepMeta(flowItem)) + '</div>' +
             '</div>' +
           '</div>' +
@@ -1628,7 +867,6 @@ internal static class DashboardScriptTemplate
       activeOrchestrators.add(orchestratorKey);
       const graph = buildGraph(currentArtifact);
       const startNode = getStartNode(currentArtifact);
-      const startKey = startNode ? createNestedNodeKey(pathTokens, startNode.id) : '';
 
       graph.nodes.forEach(function (node) {
         const isStart = !!startNode && node.id === startNode.id;
@@ -1640,13 +878,10 @@ internal static class DashboardScriptTemplate
         }
 
         const nodeKey = createNestedNodeKey(pathTokens, node.id);
-        const depth = parentKey ? baseDepth : 0;
-        const effectiveParentKey = parentKey || null;
-
         items.push({
           key: nodeKey,
-          parentKey: effectiveParentKey,
-          depth: depth,
+          parentKey: parentKey || null,
+          depth: parentKey ? baseDepth : 0,
           artifact: currentArtifact,
           graph: graph,
           node: node
@@ -1661,7 +896,7 @@ internal static class DashboardScriptTemplate
           if (childArtifact) {
             appendArtifact(
               childArtifact,
-              depth + 1,
+              (parentKey ? baseDepth : 1) + 1,
               nodeKey,
               pathTokens.concat([node.id + ':' + childArtifact.orchestratorName]),
               new Set(activeOrchestrators));
@@ -1748,30 +983,26 @@ internal static class DashboardScriptTemplate
     return pathTokens.join('>') + '|' + nodeId;
   }
 
-  function createFlatNodeKey(artifact, nodeId) {
-    return String(artifact.orchestratorName || '') + '|' + nodeId;
-  }
-
-  function getFlatNodeId(nodeKey) {
-    const separatorIndex = String(nodeKey || '').lastIndexOf('|');
-    return separatorIndex >= 0 ? String(nodeKey).slice(separatorIndex + 1) : '';
-  }
-
   function getSelectedNodeContext(selected) {
-    if (isBusinessArtifact(selected)) {
-      const flow = buildBusinessFlow(selected);
-      const item = flow.byKey[state.selectedNodeId] || null;
-      return item ? { node: item.node, graph: item.graph, item: item } : null;
-    }
-
-    const graph = buildGraph(selected);
-    const nodeId = getFlatNodeId(state.selectedNodeId);
-    const node = nodeId ? graph.byId[nodeId] : null;
-    return node ? { node: node, graph: graph, item: null } : null;
+    const flow = buildBusinessFlow(selected);
+    const item = flow.byKey[state.selectedNodeId] || null;
+    return item ? { node: item.node, graph: item.graph, item: item } : null;
   }
 
-  function getNodeLabel(node) {
-    return node.displayLabel || node.name || node.id;
+  function buildBusinessDetails(selected) {
+    const flow = buildBusinessFlow(selected);
+    const visibleItems = getVisibleBusinessFlowItems(flow);
+    const selectedIndex = visibleItems.findIndex(function (item) { return item.key === state.selectedNodeId; });
+    const selectedItem = selectedIndex >= 0 ? visibleItems[selectedIndex] : null;
+    const previousItem = selectedIndex > 0 ? visibleItems[selectedIndex - 1] : null;
+    const nextItem = selectedIndex >= 0 && selectedIndex < visibleItems.length - 1 ? visibleItems[selectedIndex + 1] : null;
+
+    return [
+      ['Highlighted stage', selectedItem ? (selectedItem.node.displayLabel || selectedItem.node.name || selectedItem.node.id) : 'None'],
+      ['Previous stage', previousItem ? (previousItem.node.displayLabel || previousItem.node.name || previousItem.node.id) : 'None'],
+      ['Next stage', nextItem ? (nextItem.node.displayLabel || nextItem.node.name || nextItem.node.id) : 'None'],
+      ['XML summary', selectedItem && selectedItem.node.documentationSummary ? selectedItem.node.documentationSummary : 'No XML summary found.']
+    ];
   }
 
   function getBusinessStepMeta(flowItem) {
@@ -1808,10 +1039,10 @@ internal static class DashboardScriptTemplate
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
       moveOrchestratorSelection(-1);
-    } else if (event.key === 'ArrowRight') {
+    } else if (!isStakeholderAudience && event.key === 'ArrowRight') {
       event.preventDefault();
       moveModeSelection(1);
-    } else if (event.key === 'ArrowLeft') {
+    } else if (!isStakeholderAudience && event.key === 'ArrowLeft') {
       event.preventDefault();
       moveModeSelection(-1);
     }
@@ -1876,7 +1107,7 @@ internal static class DashboardScriptTemplate
       return;
     }
 
-    if (isBusinessArtifact(selected)) {
+    if (isStakeholderAudience) {
       const businessMatch = getVisibleBusinessFlowItems(buildBusinessFlow(selected)).find(function (item) {
         return matchesNode(item.node, query);
       });
@@ -1901,7 +1132,7 @@ internal static class DashboardScriptTemplate
       return;
     }
 
-    state.selectedNodeId = createFlatNodeKey(selected, match.id);
+    state.selectedNodeId = match.id;
     renderSelection();
     writeUrlState(pushHistory ? 'push' : 'replace');
   }
@@ -1909,13 +1140,13 @@ internal static class DashboardScriptTemplate
   function updateNodeSearchStatus(selected) {
     const query = nodeSearchEl.value.trim().toLowerCase();
     if (!query) {
-      nodeSearchStatusEl.textContent = isBusinessArtifact(selected)
-        ? 'Search within the current business flow to jump directly to a stage.'
+      nodeSearchStatusEl.textContent = isStakeholderAudience
+        ? 'Search within the current flow to jump directly to a stage.'
         : 'Search within the current diagram to jump directly to a step.';
       return;
     }
 
-    const matches = isBusinessArtifact(selected)
+    const matches = isStakeholderAudience
       ? getVisibleBusinessFlowItems(buildBusinessFlow(selected)).filter(function (item) {
           return matchesNode(item.node, query);
         })
@@ -1924,10 +1155,10 @@ internal static class DashboardScriptTemplate
         });
 
     nodeSearchStatusEl.textContent = matches.length === 0
-      ? (isBusinessArtifact(selected) ? 'No matching stages in this view.' : 'No matching steps in this view.')
+      ? (isStakeholderAudience ? 'No matching stages in this view.' : 'No matching steps in this view.')
       : matches.length === 1
-        ? (isBusinessArtifact(selected) ? '1 matching stage. Press Enter to jump.' : '1 matching step. Press Enter to jump.')
-        : matches.length + (isBusinessArtifact(selected) ? ' matching stages. Press Enter to jump to the first.' : ' matching steps. Press Enter to jump to the first.');
+        ? (isStakeholderAudience ? '1 matching stage. Press Enter to jump.' : '1 matching step. Press Enter to jump.')
+        : matches.length + (isStakeholderAudience ? ' matching stages. Press Enter to jump to the first.' : ' matching steps. Press Enter to jump to the first.');
   }
 
   function buildGraph(artifact) {
@@ -2075,6 +1306,70 @@ internal static class DashboardScriptTemplate
     }).join('');
   }
 
+  function renderStakeholderOverview(selected) {
+    const cards = [];
+
+    if (selected.summary) {
+      cards.push(
+        '<div class="stakeholder-card"><strong>Summary</strong><p>' + escapeHtml(selected.summary) + '</p></div>'
+      );
+    }
+
+    const outcomes = selected.outcomes || [];
+    if (outcomes.length > 0) {
+      cards.push(
+        '<div class="stakeholder-card"><strong>Outcomes</strong><ul class="stakeholder-list">' +
+          outcomes.map(function (outcome) { return '<li>' + escapeHtml(outcome) + '</li>'; }).join('') +
+        '</ul></div>'
+      );
+    }
+
+    const notes = selected.audienceNotes || selected.orchestratorNotes;
+    if (notes) {
+      cards.push(
+        '<div class="stakeholder-card"><strong>Notes</strong><p>' + escapeHtml(notes) + '</p></div>'
+      );
+    }
+
+    if (cards.length === 0) {
+      cards.push(
+        '<div class="stakeholder-card"><strong>Summary</strong><p>No stakeholder summary metadata is configured for this workflow yet.</p></div>'
+      );
+    }
+
+    return cards.join('');
+  }
+
+  function describeSecondaryStepMeta(node) {
+    if (isStakeholderAudience) {
+      return node.notes || '';
+    }
+
+    return node.name && node.name !== node.displayLabel ? node.name : '';
+  }
+
+  function describeTertiaryStepMeta(node) {
+    if (isStakeholderAudience) {
+      return node.businessGroup || '';
+    }
+
+    return node.lineNumber ? 'Line ' + node.lineNumber : 'Line unknown';
+  }
+
+  function getGroupTitle(group) {
+    return isStakeholderAudience
+      ? (group.businessName || group.orchestratorName)
+      : group.orchestratorName;
+  }
+
+  function getGroupMeta(group) {
+    if (isStakeholderAudience) {
+      return group.summary || group.orchestratorNotes || group.orchestratorName;
+    }
+
+    return group.sourceProjectPath || group.sourceFile || 'Source unknown';
+  }
+
   function getSelectedGroup() {
     return state.filtered.find(function (group) {
       return group.orchestratorName === state.selectedOrchestrator;
@@ -2096,6 +1391,18 @@ internal static class DashboardScriptTemplate
     return !!getMode(group, mode);
   }
 
+  function getPreferredMode(group) {
+    if (isStakeholderAudience && hasMode(group, 'business')) {
+      return 'business';
+    }
+
+    return hasMode(group, 'developer')
+      ? 'developer'
+      : group.modes[0]
+        ? group.modes[0].mode
+        : '';
+  }
+
   function getStartNode(artifact) {
     return buildGraph(artifact).nodes.find(function (node) {
       return String(node.nodeType || '').toLowerCase() === 'orchestratorstart';
@@ -2103,7 +1410,7 @@ internal static class DashboardScriptTemplate
   }
 
   function getNodeById(artifact, nodeId) {
-    return buildGraph(artifact).byId[getFlatNodeId(nodeId)] || null;
+    return buildGraph(artifact).byId[nodeId] || null;
   }
 
   function matchesNode(node, query) {
@@ -2137,6 +1444,3 @@ internal static class DashboardScriptTemplate
       .replace(/"/g, '&quot;');
   }
 })();
-""";
-    }
-}

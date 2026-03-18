@@ -1,0 +1,65 @@
+{
+  "diagramId": "ProvisionAccountSubOrchestrator:29",
+  "orchestratorName": "ProvisionAccountSubOrchestrator",
+  "mode": "business",
+  "audience": "stakeholder",
+  "outcomes": [],
+  "generatedAt": "2026-03-14T23:29:03.512914+00:00",
+  "mermaid": "flowchart TD\n    n0([\u0022ProvisionAccountSubOrchestrator\u0022])\n    n1[\u0022CreateCustomerRecord\u0022]\n    n2[\u0022ActivateCard\u0022]\n    n3[\u0022ScheduleFollowUpSubOrchestrator\u0022]\n    n0 --\u003E n1\n    n1 --\u003E n2\n    n2 --\u003E n3",
+  "mermaidFileName": "provisionaccountsuborchestrator-business-provisionaccountsuborchestrator-29.mmd",
+  "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+  "warnings": [],
+  "nodes": [
+    {
+      "id": "n0",
+      "displayLabel": "ProvisionAccountSubOrchestrator",
+      "nodeType": "OrchestratorStart",
+      "name": "ProvisionAccountSubOrchestrator",
+      "hideInBusiness": false,
+      "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+      "lineNumber": 29
+    },
+    {
+      "id": "n1",
+      "displayLabel": "CreateCustomerRecord",
+      "nodeType": "Activity",
+      "name": "CreateCustomerRecord",
+      "hideInBusiness": false,
+      "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+      "lineNumber": 31
+    },
+    {
+      "id": "n2",
+      "displayLabel": "ActivateCard",
+      "nodeType": "Activity",
+      "name": "ActivateCard",
+      "hideInBusiness": false,
+      "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+      "lineNumber": 32
+    },
+    {
+      "id": "n3",
+      "displayLabel": "ScheduleFollowUpSubOrchestrator",
+      "nodeType": "SubOrchestrator",
+      "name": "ScheduleFollowUpSubOrchestrator",
+      "hideInBusiness": false,
+      "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+      "lineNumber": 33
+    }
+  ],
+  "edges": [
+    {
+      "fromNodeId": "n0",
+      "toNodeId": "n1"
+    },
+    {
+      "fromNodeId": "n1",
+      "toNodeId": "n2"
+    },
+    {
+      "fromNodeId": "n2",
+      "toNodeId": "n3"
+    }
+  ],
+  "diagnostics": []
+}

@@ -6,6 +6,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.MSBuild;
+using System.Text.RegularExpressions;
 
 namespace DurableDoc.Analysis;
 
@@ -39,11 +40,12 @@ public sealed class WorkflowAnalyzer
     {
         var workspace = await WorkspaceSourceLoader.LoadAsync(inputPath, config, cancellationToken).ConfigureAwait(false);
         var recognizers = BuildRecognizerMap(config);
+        var sourceMethodCatalog = SourceMethodCatalog.Create(workspace.Methods);
 
         var diagrams = workspace.Methods
             .Where(IsOrchestrator)
             .OrderBy(method => method.Method.Identifier.ValueText, StringComparer.Ordinal)
-            .Select(method => WorkflowBuilder.Build(method, recognizers, config))
+            .Select(method => WorkflowBuilder.Build(method, recognizers, sourceMethodCatalog, config))
             .ToArray();
 
         return new WorkflowAnalysisResult
@@ -72,7 +74,7 @@ public sealed class WorkflowAnalyzer
         return recognizers;
     }
 
-    private static bool IsOrchestrator(SourceMethod sourceMethod)
+    internal static bool IsOrchestrator(SourceMethod sourceMethod)
     {
         var method = sourceMethod.Method;
 
@@ -94,6 +96,7 @@ internal sealed class WorkflowBuilder
 {
     private readonly SourceMethod _sourceMethod;
     private readonly IReadOnlyDictionary<string, WrapperRecognizer> _recognizers;
+    private readonly SourceMethodCatalog _sourceMethodCatalog;
     private readonly DurableDocConfig? _config;
     private readonly List<WorkflowNode> _nodes = [];
     private readonly List<WorkflowEdge> _edges = [];
@@ -103,17 +106,26 @@ internal sealed class WorkflowBuilder
     private readonly HashSet<string> _visitedHelpers = new(StringComparer.Ordinal);
     private int _nodeIndex = 1;
 
-    private WorkflowBuilder(SourceMethod sourceMethod, IReadOnlyDictionary<string, WrapperRecognizer> recognizers, DurableDocConfig? config)
+    private WorkflowBuilder(
+        SourceMethod sourceMethod,
+        IReadOnlyDictionary<string, WrapperRecognizer> recognizers,
+        SourceMethodCatalog sourceMethodCatalog,
+        DurableDocConfig? config)
     {
         _sourceMethod = sourceMethod;
         _recognizers = recognizers;
+        _sourceMethodCatalog = sourceMethodCatalog;
         _config = config;
         _helperMethods = BuildHelperMap(sourceMethod.Method);
     }
 
-    public static WorkflowDiagram Build(SourceMethod sourceMethod, IReadOnlyDictionary<string, WrapperRecognizer> recognizers, DurableDocConfig? config)
+    public static WorkflowDiagram Build(
+        SourceMethod sourceMethod,
+        IReadOnlyDictionary<string, WrapperRecognizer> recognizers,
+        SourceMethodCatalog sourceMethodCatalog,
+        DurableDocConfig? config)
     {
-        var builder = new WorkflowBuilder(sourceMethod, recognizers, config);
+        var builder = new WorkflowBuilder(sourceMethod, recognizers, sourceMethodCatalog, config);
         return builder.Build();
     }
 
@@ -397,7 +409,14 @@ internal sealed class WorkflowBuilder
         var retryHint = recognizer.NodeType is WorkflowNodeType.RetryActivity or WorkflowNodeType.RetrySubOrchestrator
             ? "Retry policy configured via Durable API wrapper."
             : null;
-        var node = CreateNode(stepName, recognizer.NodeType, span, technicalName: methodName, retryHint: retryHint);
+        var documentationSummary = _sourceMethodCatalog.FindDocumentationSummary(stepName, recognizer.NodeType);
+        var node = CreateNode(
+            stepName,
+            recognizer.NodeType,
+            span,
+            technicalName: methodName,
+            retryHint: retryHint,
+            documentationSummary: documentationSummary);
         Connect(incoming, node.Id);
 
         outgoing = [new PendingEdge(node.Id, null)];
@@ -568,7 +587,13 @@ internal sealed class WorkflowBuilder
         }
     }
 
-    private WorkflowNode CreateNode(string displayLabel, WorkflowNodeType nodeType, FileLinePositionSpan span, string? technicalName, string? retryHint = null)
+    private WorkflowNode CreateNode(
+        string displayLabel,
+        WorkflowNodeType nodeType,
+        FileLinePositionSpan span,
+        string? technicalName,
+        string? retryHint = null,
+        string? documentationSummary = null)
     {
         var node = new WorkflowNode
         {
@@ -576,6 +601,7 @@ internal sealed class WorkflowBuilder
             DisplayLabel = displayLabel,
             NodeType = nodeType,
             Name = displayLabel,
+            DocumentationSummary = documentationSummary,
             TechnicalNameOverride = technicalName,
             RetryHint = retryHint,
             SourceFile = span.Path,
@@ -651,6 +677,7 @@ internal static class BusinessMetadataApplicator
                     DisplayLabel = string.IsNullOrWhiteSpace(orchestratorMetadata.BusinessName) ? node.DisplayLabel : orchestratorMetadata.BusinessName!,
                     NodeType = node.NodeType,
                     Name = node.Name,
+                    DocumentationSummary = node.DocumentationSummary,
                     BusinessName = string.IsNullOrWhiteSpace(orchestratorMetadata.BusinessName) ? node.BusinessName : orchestratorMetadata.BusinessName,
                     BusinessGroup = node.BusinessGroup,
                     HideInBusiness = node.HideInBusiness,
@@ -674,6 +701,7 @@ internal static class BusinessMetadataApplicator
                 DisplayLabel = string.IsNullOrWhiteSpace(step.TechnicalName) ? node.DisplayLabel : step.TechnicalName!,
                 NodeType = node.NodeType,
                 Name = string.IsNullOrWhiteSpace(step.TechnicalName) ? node.Name : step.TechnicalName!,
+                DocumentationSummary = node.DocumentationSummary,
                 BusinessName = string.IsNullOrWhiteSpace(step.BusinessName) ? node.BusinessName : step.BusinessName,
                 BusinessGroup = string.IsNullOrWhiteSpace(step.BusinessGroup) ? node.BusinessGroup : step.BusinessGroup,
                 HideInBusiness = step.HideInBusiness || node.HideInBusiness,
@@ -702,6 +730,167 @@ internal static class BusinessMetadataApplicator
 internal sealed record WrapperRecognizer(WorkflowNodeType NodeType, int? TargetNameArgumentIndex);
 
 internal sealed record SourceMethod(MethodDeclarationSyntax Method, string? ProjectPath);
+
+internal sealed class SourceMethodCatalog
+{
+    private readonly Dictionary<string, string?> _orchestratorSummariesByName;
+    private readonly Dictionary<string, string?> _activitySummariesByMethodName;
+    private readonly Dictionary<string, string?> _activitySummariesByFunctionName;
+
+    private SourceMethodCatalog(
+        Dictionary<string, string?> orchestratorSummariesByName,
+        Dictionary<string, string?> activitySummariesByMethodName,
+        Dictionary<string, string?> activitySummariesByFunctionName)
+    {
+        _orchestratorSummariesByName = orchestratorSummariesByName;
+        _activitySummariesByMethodName = activitySummariesByMethodName;
+        _activitySummariesByFunctionName = activitySummariesByFunctionName;
+    }
+
+    public static SourceMethodCatalog Create(IReadOnlyList<SourceMethod> methods)
+    {
+        var orchestratorSummariesByName = new Dictionary<string, string?>(StringComparer.Ordinal);
+        var activitySummariesByMethodName = new Dictionary<string, string?>(StringComparer.Ordinal);
+        var activitySummariesByFunctionName = new Dictionary<string, string?>(StringComparer.Ordinal);
+
+        foreach (var sourceMethod in methods)
+        {
+            var method = sourceMethod.Method;
+            var summary = ExtractDocumentationSummary(method);
+
+            if (WorkflowAnalyzer.IsOrchestrator(sourceMethod))
+            {
+                PreferDocumentedValue(orchestratorSummariesByName, method.Identifier.ValueText, summary);
+                continue;
+            }
+
+            PreferDocumentedValue(activitySummariesByMethodName, method.Identifier.ValueText, summary);
+
+            if (TryGetDurableFunctionName(method, out var functionName))
+            {
+                PreferDocumentedValue(activitySummariesByFunctionName, functionName, summary);
+            }
+        }
+
+        return new SourceMethodCatalog(
+            orchestratorSummariesByName,
+            activitySummariesByMethodName,
+            activitySummariesByFunctionName);
+    }
+
+    public string? FindDocumentationSummary(string stepName, WorkflowNodeType nodeType)
+    {
+        if (string.IsNullOrWhiteSpace(stepName))
+        {
+            return null;
+        }
+
+        return nodeType switch
+        {
+            WorkflowNodeType.SubOrchestrator or WorkflowNodeType.RetrySubOrchestrator =>
+                GetValue(_orchestratorSummariesByName, stepName),
+            WorkflowNodeType.Activity or WorkflowNodeType.RetryActivity =>
+                GetValue(_activitySummariesByMethodName, stepName) ?? GetValue(_activitySummariesByFunctionName, stepName),
+            _ => null,
+        };
+    }
+
+    private static string? GetValue(Dictionary<string, string?> map, string key)
+        => map.TryGetValue(key, out var value) ? value : null;
+
+    private static void PreferDocumentedValue(Dictionary<string, string?> map, string key, string? summary)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return;
+        }
+
+        if (!map.TryGetValue(key, out var existing) || string.IsNullOrWhiteSpace(existing))
+        {
+            map[key] = string.IsNullOrWhiteSpace(summary) ? null : summary;
+        }
+    }
+
+    private static string? ExtractDocumentationSummary(MethodDeclarationSyntax method)
+    {
+        var documentation = method.GetLeadingTrivia()
+            .Select(trivia => trivia.GetStructure())
+            .OfType<DocumentationCommentTriviaSyntax>()
+            .FirstOrDefault();
+
+        if (documentation is null)
+        {
+            return null;
+        }
+
+        var summary = documentation.DescendantNodes()
+            .OfType<XmlElementSyntax>()
+            .FirstOrDefault(element =>
+                string.Equals(element.StartTag?.Name.LocalName.ValueText, "summary", StringComparison.OrdinalIgnoreCase));
+
+        if (summary is null)
+        {
+            return null;
+        }
+
+        var text = summary.Content.ToFullString();
+        return NormalizeWhitespace(text);
+    }
+
+    private static bool TryGetDurableFunctionName(MethodDeclarationSyntax method, out string functionName)
+    {
+        foreach (var attribute in method.AttributeLists.SelectMany(list => list.Attributes))
+        {
+            var name = attribute.Name.ToString();
+            if (!name.EndsWith("Function", StringComparison.Ordinal) &&
+                !name.EndsWith("FunctionAttribute", StringComparison.Ordinal) &&
+                !name.EndsWith("FunctionName", StringComparison.Ordinal) &&
+                !name.EndsWith("FunctionNameAttribute", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var argument = attribute.ArgumentList?.Arguments.FirstOrDefault()?.Expression;
+            if (argument is not null && TryGetAttributeStringValue(argument, out var resolvedName))
+            {
+                functionName = resolvedName;
+                return !string.IsNullOrWhiteSpace(functionName);
+            }
+        }
+
+        functionName = string.Empty;
+        return false;
+    }
+
+    private static bool TryGetAttributeStringValue(ExpressionSyntax expression, out string value)
+    {
+        switch (expression)
+        {
+            case LiteralExpressionSyntax literal when literal.IsKind(SyntaxKind.StringLiteralExpression):
+                value = literal.Token.ValueText;
+                return true;
+            case InvocationExpressionSyntax nameofInvocation when nameofInvocation.Expression.ToString() == "nameof":
+                value = nameofInvocation.ArgumentList.Arguments.FirstOrDefault()?.Expression.ToString() ?? "nameof";
+                return true;
+            default:
+                value = string.Empty;
+                return false;
+        }
+    }
+
+    private static string? NormalizeWhitespace(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var withoutDocPrefixes = Regex.Replace(value, @"^\s*///\s?", string.Empty, RegexOptions.Multiline);
+        withoutDocPrefixes = Regex.Replace(withoutDocPrefixes, @"^\s*\*\s?", string.Empty, RegexOptions.Multiline);
+        var normalized = Regex.Replace(withoutDocPrefixes, @"\s+", " ").Trim();
+        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+    }
+}
 
 internal sealed class WorkspaceLoadResult
 {

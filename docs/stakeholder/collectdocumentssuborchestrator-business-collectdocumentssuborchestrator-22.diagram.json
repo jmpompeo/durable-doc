@@ -1,0 +1,65 @@
+{
+  "diagramId": "CollectDocumentsSubOrchestrator:22",
+  "orchestratorName": "CollectDocumentsSubOrchestrator",
+  "mode": "business",
+  "audience": "stakeholder",
+  "outcomes": [],
+  "generatedAt": "2026-03-14T23:29:03.512914+00:00",
+  "mermaid": "flowchart TD\n    n0([\u0022CollectDocumentsSubOrchestrator\u0022])\n    n1[\u0022CreateCase\u0022]\n    n2[\u0022UploadIdentityDocument\u0022]\n    n3[\u0022UploadProofOfAddress\u0022]\n    n0 --\u003E n1\n    n1 --\u003E n2\n    n2 --\u003E n3",
+  "mermaidFileName": "collectdocumentssuborchestrator-business-collectdocumentssuborchestrator-22.mmd",
+  "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+  "warnings": [],
+  "nodes": [
+    {
+      "id": "n0",
+      "displayLabel": "CollectDocumentsSubOrchestrator",
+      "nodeType": "OrchestratorStart",
+      "name": "CollectDocumentsSubOrchestrator",
+      "hideInBusiness": false,
+      "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+      "lineNumber": 22
+    },
+    {
+      "id": "n1",
+      "displayLabel": "CreateCase",
+      "nodeType": "Activity",
+      "name": "CreateCase",
+      "hideInBusiness": false,
+      "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+      "lineNumber": 24
+    },
+    {
+      "id": "n2",
+      "displayLabel": "UploadIdentityDocument",
+      "nodeType": "Activity",
+      "name": "UploadIdentityDocument",
+      "hideInBusiness": false,
+      "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+      "lineNumber": 25
+    },
+    {
+      "id": "n3",
+      "displayLabel": "UploadProofOfAddress",
+      "nodeType": "Activity",
+      "name": "UploadProofOfAddress",
+      "hideInBusiness": false,
+      "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+      "lineNumber": 26
+    }
+  ],
+  "edges": [
+    {
+      "fromNodeId": "n0",
+      "toNodeId": "n1"
+    },
+    {
+      "fromNodeId": "n1",
+      "toNodeId": "n2"
+    },
+    {
+      "fromNodeId": "n2",
+      "toNodeId": "n3"
+    }
+  ],
+  "diagnostics": []
+}

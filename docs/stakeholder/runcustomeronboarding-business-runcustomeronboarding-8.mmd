@@ -1,0 +1,16 @@
+flowchart TD
+    n0(["RunCustomerOnboarding"])
+    n1["LoadApplication"]
+    n2["ValidateCustomer"]
+    n3["CollectDocumentsSubOrchestrator"]
+    n4["ProvisionAccountSubOrchestrator"]
+    n5[["WaitForCustomerApproval"]]
+    n6[/"CreateTimer"/]
+    n7["SendWelcomeEmail"]
+    n0 --> n1
+    n1 --> n2
+    n2 --> n3
+    n3 --> n4
+    n4 --> n5
+    n5 --> n6
+    n6 --> n7

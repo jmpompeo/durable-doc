@@ -50,6 +50,7 @@ public sealed class WorkflowNode
     public string DisplayLabel { get; init; } = string.Empty;
     public WorkflowNodeType NodeType { get; init; }
     public string Name { get; init; } = string.Empty;
+    public string? DocumentationSummary { get; init; }
     public string? BusinessName { get; init; }
     public string? BusinessGroup { get; init; }
     public bool HideInBusiness { get; init; }

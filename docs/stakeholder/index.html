@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>durable-doc dashboard</title>
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+<body data-audience="stakeholder">
+  <div class="app-shell">
+    <aside class="sidebar">
+      <section class="panel brand">
+        <p id="brand-eyebrow" class="eyebrow">Workflow Explorer</p>
+        <h1 id="brand-title">durable-doc</h1>
+        <p id="brand-lede" class="lede">Read the flow in order, switch views quickly, and share a simple snapshot of each workflow.</p>
+      </section>
+
+      <section class="panel controls">
+        <label class="field" for="orchestrator-filter">
+          <span id="orchestrator-filter-label">Filter orchestrators</span>
+          <input id="orchestrator-filter" type="search" placeholder="Search by orchestrator name">
+        </label>
+        <label id="mode-filter-field" class="field" for="mode-filter">
+          <span id="mode-filter-label">Availability</span>
+          <select id="mode-filter">
+            <option value="">All mode availability</option>
+            <option value="developer">Has developer view</option>
+            <option value="business">Has business view</option>
+            <option value="both">Has both views</option>
+          </select>
+        </label>
+        <p id="controls-hint" class="hint">Use Up and Down to move between orchestrators, Left and Right to switch modes, and <code>/</code> to focus step search.</p>
+      </section>
+
+      <section class="panel results-panel">
+        <div class="section-heading">
+          <h2 id="results-heading">Orchestrators</h2>
+          <span id="result-count" class="count">0 total</span>
+        </div>
+        <div id="results" class="results"></div>
+      </section>
+    </aside>
+
+    <main id="workspace" class="workspace">
+      <section id="stage" class="panel stage">
+        <div class="stage-header">
+          <div>
+            <div id="selected-mode" class="badge">No selection</div>
+            <h2 id="selected-title">Select a generated diagram</h2>
+          </div>
+          <div class="stage-actions">
+            <div id="mode-switcher" class="mode-switcher"></div>
+            <button id="toggle-stage" class="panel-toggle" type="button" aria-pressed="false">Collapse stage</button>
+            <button id="compare-toggle" class="compare-toggle technical-only" type="button">Compare views</button>
+            <div id="refresh-indicator" class="refresh-indicator technical-only">Static snapshot</div>
+          </div>
+        </div>
+
+        <p id="stage-hint" class="hint">The diagram view prioritizes execution order. Click a step to trace what comes before and after it.</p>
+
+        <div id="summary-cards" class="summary-grid"></div>
+
+        <div class="toolbar">
+          <label class="field field-grow" for="node-search">
+            <span id="node-search-label">Jump to step</span>
+            <input id="node-search" type="search" placeholder="Find step, event, timer, or branch label">
+          </label>
+          <div class="toolbar-actions">
+            <button id="find-step" type="button">Find</button>
+            <button id="start-step" type="button">Start step</button>
+            <button id="clear-step" type="button">Clear highlight</button>
+          </div>
+        </div>
+
+        <div id="node-search-status" class="meta"></div>
+        <div id="legend" class="legend"></div>
+        <div id="diagram-grid" class="diagram-grid">
+          <div class="empty">Choose an orchestrator to inspect its generated diagrams.</div>
+        </div>
+      </section>
+
+      <aside class="panel inspector">
+        <section class="inspector-section">
+          <h3 id="details-heading">Workflow details</h3>
+          <div id="stakeholder-overview" class="stakeholder-overview"></div>
+          <div id="details" class="details-grid"></div>
+        </section>
+
+        <section class="inspector-section">
+          <h3 id="node-details-heading">Selected step</h3>
+          <div id="node-details" class="node-details empty">Select a step to inspect its incoming and outgoing flow.</div>
+        </section>
+
+        <section class="inspector-section technical-only">
+          <h3 id="warnings-heading">Warnings</h3>
+          <ul id="warnings" class="warnings"></ul>
+        </section>
+
+        <details id="source-panel" class="source-panel technical-only">
+          <summary>Mermaid source</summary>
+          <pre id="source" class="source"></pre>
+        </details>
+      </aside>
+    </main>
+  </div>
+
+  <script id="dashboard-bootstrap" type="application/json">[
+  {
+    "diagramId": "CollectDocumentsSubOrchestrator:22",
+    "orchestratorName": "CollectDocumentsSubOrchestrator",
+    "mode": "business",
+    "audience": "stakeholder",
+    "outcomes": [],
+    "generatedAt": "2026-03-14T23:29:03.512914+00:00",
+    "mermaid": "flowchart TD\n    n0([\u0022CollectDocumentsSubOrchestrator\u0022])\n    n1[\u0022CreateCase\u0022]\n    n2[\u0022UploadIdentityDocument\u0022]\n    n3[\u0022UploadProofOfAddress\u0022]\n    n0 --\u003E n1\n    n1 --\u003E n2\n    n2 --\u003E n3",
+    "mermaidFileName": "",
+    "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+    "warnings": [],
+    "nodes": [
+      {
+        "id": "n0",
+        "displayLabel": "CollectDocumentsSubOrchestrator",
+        "nodeType": "OrchestratorStart",
+        "name": "CollectDocumentsSubOrchestrator",
+        "hideInBusiness": false,
+        "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+        "lineNumber": 22
+      },
+      {
+        "id": "n1",
+        "displayLabel": "CreateCase",
+        "nodeType": "Activity",
+        "name": "CreateCase",
+        "hideInBusiness": false,
+        "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+        "lineNumber": 24
+      },
+      {
+        "id": "n2",
+        "displayLabel": "UploadIdentityDocument",
+        "nodeType": "Activity",
+        "name": "UploadIdentityDocument",
+        "hideInBusiness": false,
+        "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+        "lineNumber": 25
+      },
+      {
+        "id": "n3",
+        "displayLabel": "UploadProofOfAddress",
+        "nodeType": "Activity",
+        "name": "UploadProofOfAddress",
+        "hideInBusiness": false,
+        "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+        "lineNumber": 26
+      }
+    ],
+    "edges": [
+      {
+        "fromNodeId": "n0",
+        "toNodeId": "n1"
+      },
+      {
+        "fromNodeId": "n1",
+        "toNodeId": "n2"
+      },
+      {
+        "fromNodeId": "n2",
+        "toNodeId": "n3"
+      }
+    ],
+    "diagnostics": []
+  },
+  {
+    "diagramId": "ProvisionAccountSubOrchestrator:29",
+    "orchestratorName": "ProvisionAccountSubOrchestrator",
+    "mode": "business",
+    "audience": "stakeholder",
+    "outcomes": [],
+    "generatedAt": "2026-03-14T23:29:03.512914+00:00",
+    "mermaid": "flowchart TD\n    n0([\u0022ProvisionAccountSubOrchestrator\u0022])\n    n1[\u0022CreateCustomerRecord\u0022]\n    n2[\u0022ActivateCard\u0022]\n    n3[\u0022ScheduleFollowUpSubOrchestrator\u0022]\n    n0 --\u003E n1\n    n1 --\u003E n2\n    n2 --\u003E n3",
+    "mermaidFileName": "",
+    "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+    "warnings": [],
+    "nodes": [
+      {
+        "id": "n0",
+        "displayLabel": "ProvisionAccountSubOrchestrator",
+        "nodeType": "OrchestratorStart",
+        "name": "ProvisionAccountSubOrchestrator",
+        "hideInBusiness": false,
+        "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+        "lineNumber": 29
+      },
+      {
+        "id": "n1",
+        "displayLabel": "CreateCustomerRecord",
+        "nodeType": "Activity",
+        "name": "CreateCustomerRecord",
+        "hideInBusiness": false,
+        "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+        "lineNumber": 31
+      },
+      {
+        "id": "n2",
+        "displayLabel": "ActivateCard",
+        "nodeType": "Activity",
+        "name": "ActivateCard",
+        "hideInBusiness": false,
+        "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+        "lineNumber": 32
+      },
+      {
+        "id": "n3",
+        "displayLabel": "ScheduleFollowUpSubOrchestrator",
+        "nodeType": "SubOrchestrator",
+        "name": "ScheduleFollowUpSubOrchestrator",
+        "hideInBusiness": false,
+        "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+        "lineNumber": 33
+      }
+    ],
+    "edges": [
+      {
+        "fromNodeId": "n0",
+        "toNodeId": "n1"
+      },
+      {
+        "fromNodeId": "n1",
+        "toNodeId": "n2"
+      },
+      {
+        "fromNodeId": "n2",
+        "toNodeId": "n3"
+      }
+    ],
+    "diagnostics": []
+  },
+  {
+    "diagramId": "RunCustomerOnboarding:8",
+    "orchestratorName": "RunCustomerOnboarding",
+    "mode": "business",
+    "audience": "stakeholder",
+    "outcomes": [],
+    "generatedAt": "2026-03-14T23:29:03.512914+00:00",
+    "mermaid": "flowchart TD\n    n0([\u0022RunCustomerOnboarding\u0022])\n    n1[\u0022LoadApplication\u0022]\n    n2[\u0022ValidateCustomer\u0022]\n    n3[\u0022CollectDocumentsSubOrchestrator\u0022]\n    n4[\u0022ProvisionAccountSubOrchestrator\u0022]\n    n5[[\u0022WaitForCustomerApproval\u0022]]\n    n6[/\u0022CreateTimer\u0022/]\n    n7[\u0022SendWelcomeEmail\u0022]\n    n0 --\u003E n1\n    n1 --\u003E n2\n    n2 --\u003E n3\n    n3 --\u003E n4\n    n4 --\u003E n5\n    n5 --\u003E n6\n    n6 --\u003E n7",
+    "mermaidFileName": "",
+    "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+    "warnings": [],
+    "nodes": [
+      {
+        "id": "n0",
+        "displayLabel": "RunCustomerOnboarding",
+        "nodeType": "OrchestratorStart",
+        "name": "RunCustomerOnboarding",
+        "hideInBusiness": false,
+        "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+        "lineNumber": 8
+      },
+      {
+        "id": "n1",
+        "displayLabel": "LoadApplication",
+        "nodeType": "Activity",
+        "name": "LoadApplication",
+        "hideInBusiness": false,
+        "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+        "lineNumber": 10
+      },
+      {
+        "id": "n2",
+        "displayLabel": "ValidateCustomer",
+        "nodeType": "Activity",
+        "name": "ValidateCustomer",
+        "hideInBusiness": false,
+        "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+        "lineNumber": 11
+      },
+      {
+        "id": "n4",
+        "displayLabel": "CollectDocumentsSubOrchestrator",
+        "nodeType": "SubOrchestrator",
+        "name": "CollectDocumentsSubOrchestrator",
+        "hideInBusiness": false,
+        "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+        "lineNumber": 13
+      },
+      {
+        "id": "n5",
+        "displayLabel": "ProvisionAccountSubOrchestrator",
+        "nodeType": "SubOrchestrator",
+        "name": "ProvisionAccountSubOrchestrator",
+        "hideInBusiness": false,
+        "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+        "lineNumber": 14
+      },
+      {
+        "id": "n6",
+        "displayLabel": "WaitForCustomerApproval",
+        "nodeType": "ExternalEvent",
+        "name": "WaitForCustomerApproval",
+        "hideInBusiness": false,
+        "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+        "lineNumber": 15
+      },
+      {
+        "id": "n7",
+        "displayLabel": "CreateTimer",
+        "nodeType": "Timer",
+        "name": "CreateTimer",
+        "hideInBusiness": false,
+        "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+        "lineNumber": 16
+      },
+      {
+        "id": "n8",
+        "displayLabel": "SendWelcomeEmail",
+        "nodeType": "Activity",
+        "name": "SendWelcomeEmail",
+        "hideInBusiness": false,
+        "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+        "lineNumber": 17
+      }
+    ],
+    "edges": [
+      {
+        "fromNodeId": "n0",
+        "toNodeId": "n1"
+      },
+      {
+        "fromNodeId": "n1",
+        "toNodeId": "n2"
+      },
+      {
+        "fromNodeId": "n2",
+        "toNodeId": "n4"
+      },
+      {
+        "fromNodeId": "n4",
+        "toNodeId": "n5"
+      },
+      {
+        "fromNodeId": "n5",
+        "toNodeId": "n6"
+      },
+      {
+        "fromNodeId": "n6",
+        "toNodeId": "n7"
+      },
+      {
+        "fromNodeId": "n7",
+        "toNodeId": "n8"
+      }
+    ],
+    "diagnostics": []
+  },
+  {
+    "diagramId": "ScheduleFollowUpSubOrchestrator:36",
+    "orchestratorName": "ScheduleFollowUpSubOrchestrator",
+    "mode": "business",
+    "audience": "stakeholder",
+    "outcomes": [],
+    "generatedAt": "2026-03-14T23:29:03.512914+00:00",
+    "mermaid": "flowchart TD\n    n0([\u0022ScheduleFollowUpSubOrchestrator\u0022])\n    n1[\u0022ScheduleWelcomeCall\u0022]\n    n2[\u0022ScheduleFirstBillingCycle\u0022]\n    n0 --\u003E n1\n    n1 --\u003E n2",
+    "mermaidFileName": "",
+    "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+    "warnings": [],
+    "nodes": [
+      {
+        "id": "n0",
+        "displayLabel": "ScheduleFollowUpSubOrchestrator",
+        "nodeType": "OrchestratorStart",
+        "name": "ScheduleFollowUpSubOrchestrator",
+        "hideInBusiness": false,
+        "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+        "lineNumber": 36
+      },
+      {
+        "id": "n1",
+        "displayLabel": "ScheduleWelcomeCall",
+        "nodeType": "Activity",
+        "name": "ScheduleWelcomeCall",
+        "hideInBusiness": false,
+        "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+        "lineNumber": 38
+      },
+      {
+        "id": "n2",
+        "displayLabel": "ScheduleFirstBillingCycle",
+        "nodeType": "Activity",
+        "name": "ScheduleFirstBillingCycle",
+        "hideInBusiness": false,
+        "sourceFile": "/Users/patriciarockentine/repos/joey/durable-doc/samples/DurableDoc.Sample.Advanced/SampleAdvancedOrchestrator.cs",
+        "lineNumber": 39
+      }
+    ],
+    "edges": [
+      {
+        "fromNodeId": "n0",
+        "toNodeId": "n1"
+      },
+      {
+        "fromNodeId": "n1",
+        "toNodeId": "n2"
+      }
+    ],
+    "diagnostics": []
+  }
+]</script>
+  <script src="mermaid.min.js"></script>
+  <script src="dashboard.js"></script>
+</body>
+</html>

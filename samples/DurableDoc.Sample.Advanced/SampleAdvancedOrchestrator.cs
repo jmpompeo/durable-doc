@@ -19,6 +19,9 @@ public static class SampleAdvancedOrchestrator
         _ = application;
     }
 
+    /// <summary>
+    /// Collects the core identity documents needed before the account can be opened.
+    /// </summary>
     public static async Task CollectDocumentsSubOrchestrator(TaskOrchestrationContext context)
     {
         await context.CallActivityAsync("CreateCase");
@@ -33,11 +36,49 @@ public static class SampleAdvancedOrchestrator
         await context.CallSubOrchestratorAsync("ScheduleFollowUpSubOrchestrator");
     }
 
+    /// <summary>
+    /// Schedules the first customer-facing follow-up actions after the account is provisioned.
+    /// </summary>
     public static async Task ScheduleFollowUpSubOrchestrator(TaskOrchestrationContext context)
     {
         await context.CallActivityAsync("ScheduleWelcomeCall");
         await context.CallActivityAsync("ScheduleFirstBillingCycle");
     }
+
+    /// <summary>
+    /// Loads the submitted application so onboarding can use the customer and product details.
+    /// </summary>
+    [Function(nameof(LoadApplication))]
+    public static CustomerApplication LoadApplication([ActivityTrigger] TaskActivityContext context)
+        => new("sample-customer", "checking");
+
+    /// <summary>
+    /// Confirms the customer profile satisfies the onboarding policy checks.
+    /// </summary>
+    [Function(nameof(ValidateCustomer))]
+    public static Task ValidateCustomer([ActivityTrigger] TaskActivityContext context)
+        => Task.CompletedTask;
+
+    /// <summary>
+    /// Opens the operations case that tracks document collection progress.
+    /// </summary>
+    [Function(nameof(CreateCase))]
+    public static Task CreateCase([ActivityTrigger] TaskActivityContext context)
+        => Task.CompletedTask;
+
+    /// <summary>
+    /// Sends the final onboarding email after the workflow reaches its terminal state.
+    /// </summary>
+    [Function(nameof(SendWelcomeEmail))]
+    public static Task SendWelcomeEmail([ActivityTrigger] TaskActivityContext context)
+        => Task.CompletedTask;
+
+    /// <summary>
+    /// Books the welcome call that closes the onboarding loop with the customer.
+    /// </summary>
+    [Function(nameof(ScheduleWelcomeCall))]
+    public static Task ScheduleWelcomeCall([ActivityTrigger] TaskActivityContext context)
+        => Task.CompletedTask;
 
     private sealed record CustomerApplication(string CustomerId, string ProductCode);
 }

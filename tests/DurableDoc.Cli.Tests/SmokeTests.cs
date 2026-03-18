@@ -807,6 +807,7 @@ public class Demo
         var mainDiagramPath = Directory.EnumerateFiles(outputFixture.OutputDirectory, "*runcustomeronboarding*.mmd").Single();
         var mermaid = File.ReadAllText(mainDiagramPath);
         var dashboard = File.ReadAllText(Path.Combine(outputFixture.OutputDirectory, "index.html"));
+        var dashboardData = File.ReadAllText(Path.Combine(outputFixture.OutputDirectory, "dashboard-data.json"));
 
         Assert.Contains("LoadApplication", mermaid);
         Assert.Contains("{{\"ReserveCreditCheck\"}}", mermaid);
@@ -815,6 +816,8 @@ public class Demo
         Assert.Contains("CollectDocumentsSubOrchestrator", mermaid);
         Assert.Contains("ProvisionAccountSubOrchestrator", dashboard);
         Assert.Contains("ScheduleFollowUpSubOrchestrator", dashboard);
+        Assert.Contains("\"documentationSummary\": \"Loads the submitted application so onboarding can use the customer and product details.\"", dashboardData, StringComparison.Ordinal);
+        Assert.DoesNotContain("durable-doc stakeholder view", dashboard, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

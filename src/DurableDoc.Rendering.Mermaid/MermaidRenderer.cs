@@ -134,6 +134,7 @@ public static class MermaidRenderer
                     DisplayLabel = GetBusinessNodeName(node),
                     NodeType = GetBusinessNodeType(node),
                     Name = GetBusinessNodeName(node),
+                    DocumentationSummary = node.DocumentationSummary,
                     SourceFile = node.SourceFile,
                     LineNumber = node.LineNumber,
                 };
