@@ -50,7 +50,7 @@ public class Demo
         var artifact = File.ReadAllText(Directory.EnumerateFiles(fixture.OutputDirectory, "*.diagram.json").Single());
         var dashboardData = File.ReadAllText(Path.Combine(fixture.OutputDirectory, "dashboard-data.json"));
         
-        Assert.Contains("flowchart TD", mermaid);
+        Assert.Contains("flowchart LR", mermaid);
         Assert.Contains("First", dashboard);
         Assert.Contains("\"mode\": \"developer\"", dashboard, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("dashboard-bootstrap", dashboard, StringComparison.Ordinal);
@@ -75,6 +75,8 @@ public class Demo
         Assert.Contains(".stage-actions .refresh-indicator {\n  margin-left: auto;", dashboardCss, StringComparison.Ordinal);
         Assert.Contains(".stage-header > div:first-child {\n  min-width: 0;", dashboardCss, StringComparison.Ordinal);
         Assert.Contains("#selected-title {\n  overflow-wrap: anywhere;", dashboardCss, StringComparison.Ordinal);
+        Assert.Contains(".diagram-render-shell {\n  min-width: fit-content;", dashboardCss, StringComparison.Ordinal);
+        Assert.DoesNotContain(".diagram-render-edge-list", dashboardCss, StringComparison.Ordinal);
         Assert.DoesNotContain("padding-right: 24px;", dashboardCss, StringComparison.Ordinal);
         Assert.Contains("function setViewerLink(selected)", dashboardJs, StringComparison.Ordinal);
         Assert.Contains("new URL('diagram.html', window.location.href)", dashboardJs, StringComparison.Ordinal);
@@ -84,11 +86,12 @@ public class Demo
         Assert.Contains("diagram.js", diagramHtml, StringComparison.Ordinal);
         Assert.Contains("mermaid.min.js", diagramHtml, StringComparison.Ordinal);
         Assert.Contains(@"source.split(/\r?\n/)", bundle, StringComparison.Ordinal);
-        Assert.Contains("createElementNS(SVG_NS, tagName)", bundle, StringComparison.Ordinal);
-        Assert.Contains("container.appendChild(svg);", bundle, StringComparison.Ordinal);
-        Assert.Contains("marker-end', 'url(#arrowhead)'", bundle, StringComparison.Ordinal);
-        Assert.Contains("replace(/([a-z0-9])([A-Z])/g, '$1 $2')", bundle, StringComparison.Ordinal);
-        Assert.Contains("height: baseNodeHeight + (Math.max(lines.length - 1, 0) * lineHeight)", bundle, StringComparison.Ordinal);
+        Assert.Contains("function appendSequentialConnector", bundle, StringComparison.Ordinal);
+        Assert.Contains("function appendWrappedConnector", bundle, StringComparison.Ordinal);
+        Assert.Contains("var maxNodesPerRow = Math.max(1, Math.floor((metrics.availableWidth - (metrics.padding * 2) + metrics.horizontalGap)", bundle, StringComparison.Ordinal);
+        Assert.Contains("container.setAttribute('data-mermaid-source', source || '');", bundle, StringComparison.Ordinal);
+        Assert.Contains("global.addEventListener('resize'", bundle, StringComparison.Ordinal);
+        Assert.DoesNotContain("diagram-render-edge-list", bundle, StringComparison.Ordinal);
         Assert.Contains("\"nodes\": [", artifact, StringComparison.Ordinal);
         Assert.Contains("\"edges\": [", artifact, StringComparison.Ordinal);
         Assert.Contains("\"nodeType\": \"OrchestratorStart\"", artifact, StringComparison.Ordinal);

@@ -7,6 +7,9 @@ internal static class MermaidCompatibilityBundle
         return """
 (function (global) {
   var SVG_NS = 'http://www.w3.org/2000/svg';
+  var nextMarkerId = 0;
+  var resizeFrame = 0;
+  var resizeListenerAttached = false;
 
   function decodeLabel(value) {
     return value
@@ -124,107 +127,87 @@ internal static class MermaidCompatibilityBundle
     return document.createElementNS(SVG_NS, tagName);
   }
 
-  function buildLayout(parsed) {
-    var nodeWidth = 220;
-    var baseNodeHeight = 84;
-    var lineHeight = 18;
-    var horizontalGap = 64;
-    var verticalGap = 120;
-    var padding = 48;
-    var nodesById = {};
-    var outgoing = {};
-    var incoming = {};
-    var indegree = {};
-    var rankById = {};
-    var nodeMetrics = {};
-    var queue = [];
-
-    parsed.nodes.forEach(function (node) {
-      var lines = wrapLabel(node.label, 18);
-      nodesById[node.id] = node;
-      outgoing[node.id] = [];
-      incoming[node.id] = [];
-      indegree[node.id] = 0;
-      rankById[node.id] = 0;
-      nodeMetrics[node.id] = {
-        lines: lines,
-        height: baseNodeHeight + (Math.max(lines.length - 1, 0) * lineHeight)
-      };
+  function formatTypeLabel(value) {
+    return String(value || 'step').replace(/\b\w/g, function (character) {
+      return character.toUpperCase();
     });
+  }
 
-    parsed.edges.forEach(function (edge) {
-      outgoing[edge.from].push(edge);
-      incoming[edge.to].push(edge);
-      indegree[edge.to] += 1;
-    });
+  function buildMetrics(container) {
+    var availableWidth = Math.max(container.clientWidth || 0, 320);
+    var compact = availableWidth < 720;
 
-    parsed.nodes.forEach(function (node) {
-      if (indegree[node.id] === 0) {
-        queue.push(node.id);
-      }
-    });
-
-    while (queue.length > 0) {
-      var currentId = queue.shift();
-      outgoing[currentId].forEach(function (edge) {
-        rankById[edge.to] = Math.max(rankById[edge.to], rankById[currentId] + 1);
-        indegree[edge.to] -= 1;
-        if (indegree[edge.to] === 0) {
-          queue.push(edge.to);
-        }
-      });
-    }
-
-    var ranks = [];
-    parsed.nodes.forEach(function (node) {
-      var rank = rankById[node.id];
-      if (!ranks[rank]) {
-        ranks[rank] = [];
-      }
-
-      ranks[rank].push(node);
-    });
-
-    var nonEmptyRanks = ranks.filter(Boolean);
-    var maxColumns = nonEmptyRanks.reduce(function (max, rankNodes) {
-      return Math.max(max, rankNodes.length);
-    }, 1);
-    var width = (maxColumns * nodeWidth) + ((maxColumns - 1) * horizontalGap) + (padding * 2);
-    var positions = {};
-
-    var currentY = padding;
-    nonEmptyRanks.forEach(function (rankNodes) {
-      var rowWidth = (rankNodes.length * nodeWidth) + ((rankNodes.length - 1) * horizontalGap);
-      var startX = padding + ((width - (padding * 2) - rowWidth) / 2);
-      var rowHeight = rankNodes.reduce(function (max, node) {
-        return Math.max(max, nodeMetrics[node.id].height);
-      }, baseNodeHeight);
-
-      rankNodes.forEach(function (node, columnIndex) {
-        positions[node.id] = {
-          x: startX + (columnIndex * (nodeWidth + horizontalGap)),
-          y: currentY,
-          width: nodeWidth,
-          height: nodeMetrics[node.id].height,
-          lines: nodeMetrics[node.id].lines
-        };
-      });
-
-      currentY += rowHeight + (verticalGap - baseNodeHeight);
-    });
-
-    var height = currentY - (verticalGap - baseNodeHeight) + padding;
     return {
-      width: Math.max(width, 320),
-      height: Math.max(height, 220),
-      positions: positions
+      availableWidth: availableWidth,
+      nodeWidth: compact ? 188 : 220,
+      baseNodeHeight: compact ? 80 : 88,
+      lineHeight: compact ? 16 : 18,
+      horizontalGap: compact ? 22 : 30,
+      rowGap: compact ? 66 : 84,
+      padding: compact ? 20 : 32,
+      labelWidth: compact ? 14 : 18
     };
   }
 
-  function createArrowDefinitions(svg) {
+  function buildLayout(parsed, metrics) {
+    var measuredNodes = parsed.nodes.map(function (node) {
+      var lines = wrapLabel(node.label, metrics.labelWidth);
+      return {
+        id: node.id,
+        lines: lines,
+        height: metrics.baseNodeHeight + (Math.max(lines.length - 1, 0) * metrics.lineHeight)
+      };
+    });
+    var measuredById = {};
+    measuredNodes.forEach(function (item) {
+      measuredById[item.id] = item;
+    });
+
+    var maxNodesPerRow = Math.max(1, Math.floor((metrics.availableWidth - (metrics.padding * 2) + metrics.horizontalGap) / (metrics.nodeWidth + metrics.horizontalGap)));
+    var rows = [];
+    for (var index = 0; index < parsed.nodes.length; index += maxNodesPerRow) {
+      rows.push(parsed.nodes.slice(index, index + maxNodesPerRow));
+    }
+
+    var positions = {};
+    var currentY = metrics.padding;
+    rows.forEach(function (row, rowIndex) {
+      var rowHeight = row.reduce(function (maxHeight, node) {
+        var measured = measuredById[node.id];
+        return Math.max(maxHeight, measured ? measured.height : metrics.baseNodeHeight);
+      }, metrics.baseNodeHeight);
+
+      row.forEach(function (node, columnIndex) {
+        var measured = measuredById[node.id] || { lines: [''], height: metrics.baseNodeHeight };
+        var x = metrics.padding + (columnIndex * (metrics.nodeWidth + metrics.horizontalGap));
+        var y = currentY + ((rowHeight - measured.height) / 2);
+
+        positions[node.id] = {
+          x: x,
+          y: y,
+          width: metrics.nodeWidth,
+          height: measured.height,
+          lines: measured.lines,
+          rowIndex: rowIndex
+        };
+      });
+
+      currentY += rowHeight + metrics.rowGap;
+    });
+
+    return {
+      width: metrics.availableWidth,
+      height: Math.max((currentY - metrics.rowGap) + metrics.padding, metrics.baseNodeHeight + (metrics.padding * 2)),
+      positions: positions,
+      rows: rows,
+      metrics: metrics
+    };
+  }
+
+  function createArrowDefinitions(svg, markerId) {
     var defs = createSvgElement('defs');
     var marker = createSvgElement('marker');
-    marker.setAttribute('id', 'arrowhead');
+    marker.setAttribute('id', markerId);
     marker.setAttribute('markerWidth', '10');
     marker.setAttribute('markerHeight', '7');
     marker.setAttribute('refX', '8');
@@ -239,57 +222,65 @@ internal static class MermaidCompatibilityBundle
     svg.appendChild(defs);
   }
 
-  function appendEdge(svg, layout, edge) {
-    var from = layout.positions[edge.from];
-    var to = layout.positions[edge.to];
+  function appendConnector(svg, markerId, points) {
+    var path = createSvgElement('path');
+    path.setAttribute('d', points.map(function (point, index) {
+      return (index === 0 ? 'M ' : ' L ') + point.x + ' ' + point.y;
+    }).join(''));
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', '#657182');
+    path.setAttribute('stroke-width', '2.25');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    path.setAttribute('marker-end', 'url(#' + markerId + ')');
+    svg.appendChild(path);
+  }
+
+  function appendSequentialConnector(svg, layout, markerId, fromNodeId, toNodeId) {
+    var from = layout.positions[fromNodeId];
+    var to = layout.positions[toNodeId];
     if (!from || !to) {
       return;
     }
 
-    var startX = from.x + (from.width / 2);
-    var startY = from.y + from.height;
-    var endX = to.x + (to.width / 2);
-    var endY = to.y;
-    var midY = startY + ((endY - startY) / 2);
+    appendConnector(svg, markerId, [
+      { x: from.x + from.width, y: from.y + (from.height / 2) },
+      { x: to.x, y: to.y + (to.height / 2) }
+    ]);
+  }
 
-    var path = createSvgElement('path');
-    path.setAttribute('d', 'M ' + startX + ' ' + startY + ' L ' + startX + ' ' + midY + ' L ' + endX + ' ' + midY + ' L ' + endX + ' ' + endY);
-    path.setAttribute('fill', 'none');
-    path.setAttribute('stroke', '#657182');
-    path.setAttribute('stroke-width', '2.5');
-    path.setAttribute('stroke-linecap', 'round');
-    path.setAttribute('stroke-linejoin', 'round');
-    path.setAttribute('marker-end', 'url(#arrowhead)');
-    svg.appendChild(path);
-
-    if (!edge.label) {
+  function appendWrappedConnector(svg, layout, markerId, fromNodeId, toNodeId) {
+    var from = layout.positions[fromNodeId];
+    var to = layout.positions[toNodeId];
+    if (!from || !to) {
       return;
     }
 
-    var labelBackground = createSvgElement('rect');
-    var label = createSvgElement('text');
-    var labelText = decodeLabel(edge.label);
-    var labelX = (startX + endX) / 2;
-    var labelY = midY - 10;
-    var labelWidth = Math.max((labelText.length * 7) + 18, 42);
+    var rightEdge = layout.width - layout.metrics.padding;
+    var connectorY = from.y + from.height + (layout.metrics.rowGap / 2);
+    var targetX = to.x + (to.width / 2);
 
-    labelBackground.setAttribute('x', String(labelX - (labelWidth / 2)));
-    labelBackground.setAttribute('y', String(labelY - 14));
-    labelBackground.setAttribute('width', String(labelWidth));
-    labelBackground.setAttribute('height', '24');
-    labelBackground.setAttribute('rx', '12');
-    labelBackground.setAttribute('fill', '#fff8f1');
-    labelBackground.setAttribute('stroke', 'rgba(23, 34, 48, 0.12)');
-    svg.appendChild(labelBackground);
+    appendConnector(svg, markerId, [
+      { x: from.x + from.width, y: from.y + (from.height / 2) },
+      { x: rightEdge, y: from.y + (from.height / 2) },
+      { x: rightEdge, y: connectorY },
+      { x: targetX, y: connectorY },
+      { x: targetX, y: to.y }
+    ]);
+  }
 
-    label.setAttribute('x', String(labelX));
-    label.setAttribute('y', String(labelY + 2));
-    label.setAttribute('text-anchor', 'middle');
-    label.setAttribute('font-size', '12');
-    label.setAttribute('font-family', 'Avenir Next, Segoe UI, sans-serif');
-    label.setAttribute('fill', '#657182');
-    label.textContent = labelText;
-    svg.appendChild(label);
+  function appendLane(svg, layout, markerId) {
+    layout.rows.forEach(function (row, rowIndex) {
+      for (var index = 0; index < row.length - 1; index += 1) {
+        appendSequentialConnector(svg, layout, markerId, row[index].id, row[index + 1].id);
+      }
+
+      var currentLast = row[row.length - 1];
+      var nextRow = layout.rows[rowIndex + 1];
+      if (currentLast && nextRow && nextRow[0]) {
+        appendWrappedConnector(svg, layout, markerId, currentLast.id, nextRow[0].id);
+      }
+    });
   }
 
   function appendNode(svg, layout, node) {
@@ -301,7 +292,7 @@ internal static class MermaidCompatibilityBundle
     var group = createSvgElement('g');
     var rect = createSvgElement('rect');
     var type = createSvgElement('text');
-    var lines = position.lines || wrapLabel(node.label, 18);
+    var lines = position.lines || wrapLabel(node.label, layout.metrics.labelWidth);
     var label = createSvgElement('text');
 
     rect.setAttribute('x', String(position.x));
@@ -325,11 +316,11 @@ internal static class MermaidCompatibilityBundle
     type.setAttribute('font-weight', '700');
     type.setAttribute('letter-spacing', '0.08em');
     type.setAttribute('fill', '#657182');
-    type.textContent = String(node.type || 'step').toUpperCase();
+    type.textContent = formatTypeLabel(node.type).toUpperCase();
     group.appendChild(type);
 
     label.setAttribute('x', String(position.x + (position.width / 2)));
-    label.setAttribute('y', String(position.y + 42));
+    label.setAttribute('y', String(position.y + 46));
     label.setAttribute('text-anchor', 'middle');
     label.setAttribute('font-size', '15');
     label.setAttribute('font-family', 'Avenir Next, Segoe UI, sans-serif');
@@ -338,7 +329,7 @@ internal static class MermaidCompatibilityBundle
     lines.forEach(function (line, index) {
       var tspan = createSvgElement('tspan');
       tspan.setAttribute('x', String(position.x + (position.width / 2)));
-      tspan.setAttribute('dy', index === 0 ? '0' : '18');
+      tspan.setAttribute('dy', index === 0 ? '0' : String(layout.metrics.lineHeight));
       tspan.textContent = line;
       label.appendChild(tspan);
     });
@@ -347,8 +338,33 @@ internal static class MermaidCompatibilityBundle
     svg.appendChild(group);
   }
 
+  function ensureResizeListener() {
+    if (resizeListenerAttached) {
+      return;
+    }
+
+    resizeListenerAttached = true;
+    global.addEventListener('resize', function () {
+      if (resizeFrame) {
+        global.cancelAnimationFrame(resizeFrame);
+      }
+
+      resizeFrame = global.requestAnimationFrame(function () {
+        resizeFrame = 0;
+        renderAll();
+      });
+    });
+  }
+
+  function renderAll() {
+    document.querySelectorAll('[data-mermaid-source]').forEach(function (node) {
+      render(node, node.getAttribute('data-mermaid-source') || '');
+    });
+  }
+
   function render(container, source) {
     var parsed = parse(source);
+    container.setAttribute('data-mermaid-source', source || '');
     container.innerHTML = '';
 
     if (parsed.nodes.length === 0) {
@@ -356,30 +372,37 @@ internal static class MermaidCompatibilityBundle
       return;
     }
 
-    var layout = buildLayout(parsed);
+    var metrics = buildMetrics(container);
+    var layout = buildLayout(parsed, metrics);
+    var markerId = 'arrowhead-' + (nextMarkerId += 1);
+    var shell = document.createElement('div');
+    shell.className = 'diagram-render-shell';
     var svg = createSvgElement('svg');
     svg.setAttribute('viewBox', '0 0 ' + layout.width + ' ' + layout.height);
     svg.setAttribute('width', String(layout.width));
     svg.setAttribute('height', String(layout.height));
     svg.setAttribute('role', 'img');
     svg.setAttribute('aria-label', 'Workflow diagram');
+    svg.setAttribute('class', 'diagram-render-svg');
 
-    createArrowDefinitions(svg);
-    parsed.edges.forEach(function (edge) {
-      appendEdge(svg, layout, edge);
-    });
+    createArrowDefinitions(svg, markerId);
+    appendLane(svg, layout, markerId);
     parsed.nodes.forEach(function (node) {
       appendNode(svg, layout, node);
     });
 
-    container.appendChild(svg);
+    shell.appendChild(svg);
+    container.appendChild(shell);
   }
 
   global.mermaid = {
-    initialize: function () {},
+    initialize: function () {
+      ensureResizeListener();
+    },
     run: function (options) {
+      ensureResizeListener();
       (options.nodes || []).forEach(function (node) {
-        render(node, node.textContent || '');
+        render(node, node.textContent || node.getAttribute('data-mermaid-source') || '');
       });
       return Promise.resolve();
     }
