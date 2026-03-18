@@ -971,10 +971,15 @@ button.legend-item:focus-visible {
 }
 
 .diagram-render {
+  width: 100%;
   min-width: fit-content;
 }
 
-.diagram-render svg {
+.diagram-render-shell {
+  min-width: fit-content;
+}
+
+.diagram-render-svg {
   display: block;
   height: auto;
 }

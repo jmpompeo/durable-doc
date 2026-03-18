@@ -39,7 +39,7 @@ public class SmokeTests
 
         var mermaid = MermaidRenderer.Render(diagram);
 
-        Assert.Contains("flowchart TD", mermaid);
+        Assert.Contains("flowchart LR", mermaid);
         Assert.Contains("([\"OrderFulfillment\"])", mermaid);
         Assert.Contains("{{\"Retry ChargePayment\"}}", mermaid);
         Assert.Contains("((\"Fan-out\"))", mermaid);

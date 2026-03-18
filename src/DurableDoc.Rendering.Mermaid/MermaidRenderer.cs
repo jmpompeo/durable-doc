@@ -28,7 +28,7 @@ public static class MermaidRenderer
                 .Select((node, index) => new { node.Id, RenderId = $"n{index}" })
                 .ToDictionary(x => x.Id, x => x.RenderId, StringComparer.Ordinal);
 
-            builder.AppendLine("flowchart TD");
+            builder.AppendLine("flowchart LR");
 
             foreach (var node in diagram.Nodes)
             {
