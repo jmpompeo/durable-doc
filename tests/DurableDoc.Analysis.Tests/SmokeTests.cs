@@ -104,6 +104,85 @@ public sealed class TaskActivityContext { }
     }
 
     [Fact]
+    public async Task AnalyzeAsync_UsesQualifiedActivityNameSuffix_WhenResolvingActivityDocumentationSummary()
+    {
+        using var fixture = new TempSourceFixture("""
+using System;
+using System.Threading.Tasks;
+
+public class Demo
+{
+    [OrchestrationTrigger]
+    public async Task Run(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync("Activities.ChargeCard");
+    }
+
+    /// <summary>
+    /// Charges the customer's payment method before fulfillment begins.
+    /// </summary>
+    public static Task ChargeCard([ActivityTrigger] TaskActivityContext ctx)
+        => Task.CompletedTask;
+}
+
+public sealed class ActivityTriggerAttribute : Attribute { }
+
+public sealed class TaskActivityContext { }
+""");
+
+        var analyzer = new WorkflowAnalyzer();
+
+        var diagrams = await analyzer.AnalyzeAsync(fixture.DirectoryPath);
+
+        var diagram = Assert.Single(diagrams);
+        Assert.Equal(
+            "Charges the customer's payment method before fulfillment begins.",
+            diagram.Nodes.Single(node => node.DisplayLabel == "Activities.ChargeCard").DocumentationSummary);
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_UsesMemberAccessTarget_WhenResolvingActivityDocumentationSummary()
+    {
+        using var fixture = new TempSourceFixture("""
+using System;
+using System.Threading.Tasks;
+
+public class Demo
+{
+    [OrchestrationTrigger]
+    public async Task Run(TaskOrchestrationContext ctx)
+    {
+        await ctx.CallActivityAsync(ActivityNames.ChargeCard);
+    }
+
+    /// <summary>
+    /// Charges the customer's payment method before fulfillment begins.
+    /// </summary>
+    public static Task ChargeCard([ActivityTrigger] TaskActivityContext ctx)
+        => Task.CompletedTask;
+}
+
+public static class ActivityNames
+{
+    public const string ChargeCard = "Activities.ChargeCard";
+}
+
+public sealed class ActivityTriggerAttribute : Attribute { }
+
+public sealed class TaskActivityContext { }
+""");
+
+        var analyzer = new WorkflowAnalyzer();
+
+        var diagrams = await analyzer.AnalyzeAsync(fixture.DirectoryPath);
+
+        var diagram = Assert.Single(diagrams);
+        Assert.Equal(
+            "Charges the customer's payment method before fulfillment begins.",
+            diagram.Nodes.Single(node => node.DisplayLabel == "ChargeCard").DocumentationSummary);
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_LeavesDocumentationSummaryEmpty_ForNonLiteralDurableTargetNames()
     {
         using var fixture = new TempSourceFixture("""
