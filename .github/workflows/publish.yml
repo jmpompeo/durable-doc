@@ -1,0 +1,107 @@
+name: publish-package
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Tag-shaped version to pack, for example v0.2.0-preview.1
+        required: true
+        type: string
+      publish_to_nuget:
+        description: Push to NuGet.org after packing. Leave disabled until go-live is approved.
+        required: false
+        default: false
+        type: boolean
+
+  # Enable this trigger when public publishing is approved.
+  # push:
+  #   tags:
+  #     - 'v*'
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Validate release tag and derive package version
+        id: version
+        shell: bash
+        run: |
+          if [[ '${{ github.event_name }}' == 'workflow_dispatch' ]]; then
+            TAG='${{ inputs.release_tag }}'
+          else
+            TAG='${{ github.ref_name }}'
+          fi
+
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "release_tag must look like vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-label.N" >&2
+            exit 1
+          fi
+
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Using package version $VERSION"
+
+      - name: Restore
+        run: dotnet restore durable-doc.sln
+
+      - name: Build
+        run: dotnet build durable-doc.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test durable-doc.sln --configuration Release --no-build
+
+      - name: Pack CLI tool
+        run: >
+          dotnet pack ./src/DurableDoc.Cli/DurableDoc.Cli.csproj
+          --configuration Release
+          --no-build
+          -o ./artifacts/nuget
+          /p:Version=${{ steps.version.outputs.version }}
+          /p:PackageVersion=${{ steps.version.outputs.version }}
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: durable-doc-nuget-package-${{ steps.version.outputs.version }}
+          path: artifacts/nuget/*.nupkg
+
+  publish-to-nuget:
+    if: ${{ vars.ENABLE_NUGET_PUBLISH == 'true' && (github.event_name == 'push' || inputs.publish_to_nuget) }}
+    needs: package
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: durable-doc-nuget-package-${{ needs.package.outputs.version }}
+          path: artifacts/nuget
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: NuGet login (OIDC to temporary API key)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Push package to NuGet.org
+        run: >
+          dotnet nuget push artifacts/nuget/*.nupkg
+          --api-key "${{ steps.login.outputs.NUGET_API_KEY }}"
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate

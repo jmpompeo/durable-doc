@@ -5,12 +5,18 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>durable-doc</ToolCommandName>
     <PackageId>durable-doc</PackageId>
-    <Version>0.1.0</Version>
-    <PackageVersion>0.1.0</PackageVersion>
+    <Version>0.0.0-dev</Version>
+    <PackageVersion>0.0.0-dev</PackageVersion>
     <PackageTitle>durable-doc</PackageTitle>
-    <Description>CLI tool for analyzing Azure Durable Functions orchestrations and generating workflow diagrams.</Description>
-    <Authors>OpenAI</Authors>
+    <Description>CLI tool for analyzing Azure Durable Functions orchestrations and generating workflow diagrams with a lightweight local dashboard.</Description>
+    <Authors>DurableDoc contributors</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/jmpompeo/durable-doc</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/jmpompeo/durable-doc.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <PackageTags>azure-durable-functions;durable-functions;diagram;mermaid;dotnet-tool</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\DurableDoc.Analysis\DurableDoc.Analysis.csproj" />
@@ -20,5 +26,8 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" Link="README.md" />
   </ItemGroup>
 </Project>

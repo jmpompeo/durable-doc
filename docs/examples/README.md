@@ -29,7 +29,7 @@ Repack and reinstall the global tool after local changes:
 # Only run this if `dotnet tool list --global` shows durable-doc already installed.
 dotnet tool uninstall --global durable-doc
 dotnet pack ./src/DurableDoc.Cli/DurableDoc.Cli.csproj -o ./artifacts/tool
-dotnet tool install --global durable-doc --add-source ./artifacts/tool --version 0.1.0
+dotnet tool install --global durable-doc --add-source ./artifacts/tool --version 0.0.0-dev
 ```
 
 If a `.sln` does not include the target orchestrator project, the CLI now fails with a discovery message that explains solution membership is strict and suggests using the `.csproj` path or a folder path instead.
